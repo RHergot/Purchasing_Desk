@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Appel d'Offres - {{ ao.reference_ao }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; font-size: 11px; }
+        .header, .footer { text-align: center; margin-bottom: 20px; }
+        .header h1 { margin: 0; }
+        .details-header { margin-bottom: 15px; width: 100%; }
+        .details-header td { padding: 5px; vertical-align: top; }
+        .company-info { text-align: left; width: 50%;}
+        .rfq-info { text-align: right; width: 50%;}
+        .supplier-target-info { margin-top: 20px; margin-bottom: 20px; padding:10px; border: 1px solid #eee;}
+        table.items { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        table.items th, table.items td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+        table.items th { background-color: #f2f2f2; }
+        .instructions { margin-top: 20px; margin-bottom:20px; padding:10px; border: 1px solid #f0f0f0; background-color:#f9f9f9;}
+        .signature-area { margin-top: 50px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <!-- <img src="file:///CHEMIN/VERS/VOTRE/LOGO.png" alt="Votre Logo" style="max-width: 150px; margin-bottom:10px;">  {# Adaptez le chemin du logo #} -->
+        <h1>APPEL D'OFFRES</h1>
+        <p>Référence AO : <strong>{{ ao.reference_ao }}</strong></p>
+        <p>Date d'émission : {{ ao.date_creation.strftime('%d/%m/%Y') }}</p>
+        {% if ao.date_cloture_prevue %}
+        <p>Date limite de réponse souhaitée : {{ ao.date_cloture_prevue.strftime('%d/%m/%Y') }}</p>
+        {% endif %}
+    </div>
+
+    <table class="details-header">
+        <tr>
+            <td class="company-info">
+                <strong>Émis par :</strong><br>
+                VOTRE ENTREPRISE<br>
+                Votre Adresse<br>
+                Votre Ville, Code Postal<br>
+                Tel : Votre Téléphone<br>
+                Email: Votre Email<br>
+                Contact Achat : {{ ao.createur.nom_complet if ao.createur else 'Service Achats' }}
+            </td>
+            <td class="rfq-info">
+                <strong>Objet de l'appel d'offres :</strong><br>
+                {{ ao.titre | default('Fourniture de pièces et services', true) }}
+            </td>
+        </tr>
+    </table>
+
+    {% if destinataire_fournisseur %}
+    <div class="supplier-target-info">
+        <strong>À l'attention de :</strong><br>
+        {{ destinataire_fournisseur.nom }}<br>
+        {% if destinataire_fournisseur.contact %} {{ destinataire_fournisseur.contact }}<br> {% endif %}
+        {{ destinataire_fournisseur.adresse | default('', true) | nl2br }}<br>
+        Email: {{ destinataire_fournisseur.email | default('', true) }}
+    </div>
+    {% endif %}
+
+    <div class="instructions">
+        <p>Madame, Monsieur,</p>
+        <p>Nous vous remercions de bien vouloir nous faire parvenir votre meilleure offre de prix et de délai pour les articles listés ci-dessous. Veuillez indiquer vos références pour chaque article si elles diffèrent des nôtres.</p>
+        <p>Votre proposition devra nous parvenir au plus tard à la date limite indiquée ci-dessus.</p>
+        <p>Dans l'attente de votre réponse, veuillez agréer nos salutations distinguées.</p>
+    </div>
+
+    <table class="items">
+        <thead>
+            <tr>
+                <th>Notre Réf.</th>
+                <th>Votre Réf. (si différente)</th>
+                <th>Désignation</th>
+                <th>Qté Demandée</th>
+                <th>Unité</th>
+                <th>Prix Unitaire HT Proposé ({{ devise_ao }})</th>
+                <th>Total Ligne HT ({{ devise_ao }})</th>
+                <th>Délai de livraison (jours)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items_a_chiffrer %}
+            <tr>
+                <td>{{ item.piece.reference }}</td>
+                <td>{{ item.reference_fournisseur_connue | default('', true) }}</td> {# Ici on affichera la ref. fournisseur si connue #}
+                <td>{{ item.piece.designation }}</td>
+                <td>{{ item.quantite_demandee }}</td>
+                <td>{{ item.piece.unite | default('PCE', true) }}</td>
+                <td></td> {# Laissé vide pour le fournisseur #}
+                <td></td> {# Laissé vide pour le fournisseur #}
+                <td></td> {# Laissé vide pour le fournisseur #}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="footer">
+        <p>Veuillez indiquer vos conditions de vente (franco de port, conditions de paiement, validité de l'offre, etc.) en annexe ou sur votre proposition.</p>
+        <div class="signature-area">
+            <p>Le Service Achats</p>
+            <br><br>
+            <p>_________________________</p>
+        </div>
+    </div>
+</body>
+</html>
