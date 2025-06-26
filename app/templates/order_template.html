@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Bon de Commande {{ commande.numero_commande }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; font-size: 14px; }
+        .header, .footer { text-align: center; margin-bottom: 20px; }
+        .header h1 { margin: 0; }
+        .details { margin-bottom: 20px; width: 100%; }
+        .details td { padding: 5px; vertical-align: top; }
+        .company-info { text-align: left; }
+        .supplier-info { text-align: right; }
+        table.items { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        table.items th, table.items td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        table.items th { background-color: #f2f2f2; }
+        .total { text-align: right; margin-top: 20px; }
+        .total td { padding: 5px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>BON DE COMMANDE</h1>
+        <p>Numéro : {{ commande.numero_commande }}</p>
+        <p>Date : {{ commande.date_commande }}</p>
+    </div>
+
+    <table class="details">
+        <tr>
+            <td class="company-info">
+                <strong>VOTRE ENTREPRISE</strong><br>
+                Votre Adresse<br>
+                Votre Ville, Code Postal<br>
+                Votre Téléphone<br>
+                Votre Email
+            </td>
+            <td class="supplier-info">
+                <strong>Fournisseur :</strong><br>
+                {{ fournisseur.nom }}<br>
+                {{ fournisseur.adresse | default('', true) }}<br> {# Gère si l'adresse est None #}
+                {{ fournisseur.email | default('', true) }}<br>
+                {{ fournisseur.telephone | default('', true) }}
+            </td>
+        </tr>
+    </table>
+
+    <table class="items">
+        <thead>
+            <tr>
+                <th>Référence</th>
+                <th>Désignation</th>
+                <th>Quantité</th>
+                <th>Prix Unitaire HT</th>
+                <th>Total HT</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ligne in lignes %}
+            <tr>
+                <td>{{ ligne.piece.reference }}</td>
+                <td>{{ ligne.piece.designation }}</td>
+                <td>{{ ligne.quantite_commandee }}</td>
+                <td>{{ "%.2f"|format(ligne.prix_unitaire_ht) }} {{ devise }}</td>
+                <td>{{ "%.2f"|format(ligne.quantite_commandee * ligne.prix_unitaire_ht) }} {{ devise }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <table class="total">
+        <tr>
+            <td><strong>Total HT :</strong></td>
+            <td>{{ "%.2f"|format(commande.total_ht) }} {{ devise }}</td>
+        </tr>
+        <tr>
+            <td>Frais de Port HT :</td>
+            <td>{{ "%.2f"|format(commande.frais_port | default(0.0, true) | float) }} {{ devise }}</td> {# Ajout de | float ici si besoin #}
+        </tr>
+        <tr>
+            <td><strong>TOTAL COMMANDE HT :</strong></td>
+            {# CORRECTION : Convertir chaque opérande en float avant l'addition #}
+            <td><strong>{{ "%.2f"|format( (commande.total_ht | float) + (commande.frais_port | default(0.0, true) | float) ) }} {{ devise }}</strong></td>
+        </tr>
+        {# Ajoutez ici la TVA et le Total TTC si nécessaire #}
+    </table>
+
+    <div class="footer">
+        <p>Merci de nous confirmer la réception de cette commande et la date de livraison prévue.</p>
+        <p>Mode de paiement : {{ commande.mode_paiement | default('Non spécifié', true) }}</p>
+    </div>
+</body>
+</html>
