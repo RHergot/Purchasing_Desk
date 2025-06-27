@@ -1,9 +1,0 @@
-2025-06-14 10:38:20,986 - src.database_init - INFO - Tentative de connexion à la base de données: 45.140.165.228:5432
-2025-06-14 10:38:21,373 - src.database_init - INFO - Connexion à la base de données établie avec succès
-2025-06-14 10:38:21,373 - src.database_init - INFO - Exécution du script SQL: C:\Users\public\.vscode\Projets_Windsurf\Gestion_Stock_app_Postgres\sql\create_inventory_tables.sql
-2025-06-14 10:38:22,031 - src.database_init - ERROR - Erreur avec la commande: CREATE TABLE IF NOT EXISTS mouvement_stock_ext ( id SERIAL PRIMARY KEY, id_mouvement_gmao INTEGER NOT NULL REFERENCES MOUVEMENT_STOCK(id_mouvement) ON DELETE CASCADE, magasin_source_id INTEGER REFEREN
-2025-06-14 10:38:22,032 - src.database_init - ERROR - Détail de l'erreur: column "id_mouvement" referenced in foreign key constraint does not exist
-
-2025-06-14 10:38:22,032 - src.database_init - ERROR - Échec de l'exécution du script SQL
-2025-06-14 10:38:22,033 - __main__ - ERROR - Échec de l'initialisation de la base de données
-2025-06-14 10:38:22,033 - src.database_init - INFO - Connexion à la base de données fermée
