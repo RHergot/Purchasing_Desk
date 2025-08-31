@@ -13,6 +13,10 @@ from app.views.negotiations_view import NegotiationsView
 from app.controllers.negotiations_controller import NegotiationsController
 from app.views.piece_list_view import PieceListView
 from app.controllers.piece_list_controller import PieceListController
+from app.views.orders_kpi_view import OrdersKpiView
+from app.controllers.orders_kpi_controller import OrdersKpiController
+from app.views.financial_kpi_view import FinancialKpiView
+from app.controllers.financial_kpi_controller import FinancialKpiController
 
 # IMPORT CORRECT POUR LA BASE DE DONNÉES
 from database import engine
@@ -143,10 +147,54 @@ class MainWindow(QMainWindow):
             traceback.print_exc()
         
     def show_orders_kpi(self):
-        QMessageBox.information(self, "KPI", "Orders KPI will be shown here.")
+        """
+        Affiche la fenêtre KPI des commandes (Orders).
+        """
+        try:
+            if not hasattr(self, 'orders_window_instance') or not self.orders_window_instance.isVisible():
+                self.orders_window_instance = QMainWindow(self)
+                self.orders_window_instance.setWindowTitle(self.tr("Orders KPI"))
+
+                orders_view_widget = OrdersKpiView()
+                orders_controller = OrdersKpiController(view=orders_view_widget)
+                self.orders_window_instance.controller = orders_controller
+
+                self.orders_window_instance.setCentralWidget(orders_view_widget)
+                self.orders_window_instance.setGeometry(160, 160, 1200, 800)
+
+            self.orders_window_instance.show()
+            self.orders_window_instance.activateWindow()
+            self.orders_window_instance.raise_()
+
+        except Exception as e:
+            QMessageBox.critical(self, self.tr("Error"), f"Could not open Orders KPI window:\n{e}")
+            import traceback
+            traceback.print_exc()
         
     def show_financial_kpi(self):
-        QMessageBox.information(self, "KPI", "Financial KPI will be shown here.")
+        """
+        Affiche la fenêtre KPI financière.
+        """
+        try:
+            if not hasattr(self, 'financial_window_instance') or not self.financial_window_instance.isVisible():
+                self.financial_window_instance = QMainWindow(self)
+                self.financial_window_instance.setWindowTitle(self.tr("Financial KPI"))
+
+                financial_view_widget = FinancialKpiView()
+                financial_controller = FinancialKpiController(view=financial_view_widget)
+                self.financial_window_instance.controller = financial_controller
+
+                self.financial_window_instance.setCentralWidget(financial_view_widget)
+                self.financial_window_instance.setGeometry(170, 170, 1200, 800)
+
+            self.financial_window_instance.show()
+            self.financial_window_instance.activateWindow()
+            self.financial_window_instance.raise_()
+
+        except Exception as e:
+            QMessageBox.critical(self, self.tr("Error"), f"Could not open Financial KPI window:\n{e}")
+            import traceback
+            traceback.print_exc()
 
 def main():
     """
