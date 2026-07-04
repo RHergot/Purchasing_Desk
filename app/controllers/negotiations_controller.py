@@ -343,9 +343,9 @@ class NegotiationsController(QObject):
                         self.model.appendRow(master_row_items)
                         rows_in_current_model_group += 1
 
-                    reference_price_unit = float(ligne.piece.prix_achat_ht) if ligne.piece.prix_achat_ht is not None else 0.0
-                    negotiated_price_unit = float(ligne.prix_unitaire_ht)
-                    quantity = int(ligne.quantite_commandee)
+                    reference_price_unit = float(ligne.piece.prix_achat_ht or 0) if ligne.piece.prix_achat_ht is not None else 0.0
+                    negotiated_price_unit = float(ligne.prix_unitaire_ht or 0)
+                    quantity = int(ligne.quantite_commandee or 0)
                     unit_saving = reference_price_unit - negotiated_price_unit
                     line_total_saving = unit_saving * quantity
                     total_savings_all_lines += line_total_saving
@@ -376,9 +376,9 @@ class NegotiationsController(QObject):
                     machine_name = "N/A"
                     if ligne.piece.extension_info and ligne.piece.extension_info.machine:
                         machine_name = ligne.piece.extension_info.machine.nom
-                    reference_price_unit = float(ligne.piece.prix_achat_ht) if ligne.piece.prix_achat_ht is not None else 0.0
-                    negotiated_price_unit = float(ligne.prix_unitaire_ht)
-                    quantity = int(ligne.quantite_commandee)
+                    reference_price_unit = float(ligne.piece.prix_achat_ht or 0) if ligne.piece.prix_achat_ht is not None else 0.0
+                    negotiated_price_unit = float(ligne.prix_unitaire_ht or 0)
+                    quantity = int(ligne.quantite_commandee or 0)
                     unit_saving = reference_price_unit - negotiated_price_unit
                     line_total_saving = unit_saving * quantity
                     total_savings_all_lines += line_total_saving

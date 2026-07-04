@@ -23,18 +23,25 @@ config = None
 # Chemin explicite (à adapter si nécessaire) - Utilisez 'r' pour les chaînes brutes sous Windows
 WKHTMLTOPDF_PATH_EXPLICIT = r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe'
 
+# Security options for wkhtmltopdf
+PDFKIT_OPTIONS = {
+    'disable-javascript': None,
+    'disable-local-file-access': None,
+    'encoding': 'UTF-8',
+}
+
 try:
     if os.path.exists(WKHTMLTOPDF_PATH_EXPLICIT):
         print(f"DEBUG PDF: Tentative d'utilisation de wkhtmltopdf à (chemin explicite): {WKHTMLTOPDF_PATH_EXPLICIT}")
         config = pdfkit.configuration(wkhtmltopdf=WKHTMLTOPDF_PATH_EXPLICIT)
         # Petit test pour voir si pdfkit l'accepte
-        _ = pdfkit.PDFKit('html', 'string', configuration=config) 
+        _ = pdfkit.PDFKit('html', 'string', configuration=config, options=PDFKIT_OPTIONS)
         print(f"DEBUG PDF: Configuration avec chemin explicite ({WKHTMLTOPDF_PATH_EXPLICIT}) semble OK.")
     else:
         print(f"DEBUG PDF: wkhtmltopdf non trouvé à (chemin explicite): {WKHTMLTOPDF_PATH_EXPLICIT}. Tentative via le PATH système.")
         # On ne passe pas de chemin, pdfkit cherchera dans le PATH
         config = pdfkit.configuration()
-        _ = pdfkit.PDFKit('html', 'string', configuration=config) 
+        _ = pdfkit.PDFKit('html', 'string', configuration=config, options=PDFKIT_OPTIONS)
         print("DEBUG PDF: Configuration via PATH système semble OK.")
 except IOError as e_io:
     print(f"ERREUR CRITIQUE PDF: Impossible de configurer wkhtmltopdf. {e_io}")
@@ -105,7 +112,7 @@ def generate_purchase_order_pdf(commande_id, parent_widget=None):
             print(f"DEBUG PDF: User selected path: {file_path}")
             try:
                 # On utilise TOUJOURS la variable 'config' qui a été initialisée en haut
-                success = pdfkit.from_string(html_output, file_path, configuration=config)
+                success = pdfkit.from_string(html_output, file_path, configuration=config, options=PDFKIT_OPTIONS)
                 
                 if success:
                     print(f"DEBUG PDF: PDF generation reported SUCCESS. File: {file_path}")
@@ -226,7 +233,7 @@ def generate_rfq_pdf(ao_id, fournisseur_id_destinataire=None, parent_widget=None
         )
 
         if file_path:
-            success = pdfkit.from_string(html_output, file_path, configuration=config)
+            success = pdfkit.from_string(html_output, file_path, configuration=config, options=PDFKIT_OPTIONS)
             if success:
                 print(f"RFQ PDF saved to: {file_path}")
                 QMessageBox.information(parent_widget, "PDF Saved", f"RFQ PDF saved to:\n{file_path}")

@@ -217,7 +217,19 @@ class AoDetailController(QObject):
             for row in range(pricing_model.rowCount()):
                 price_item = pricing_model.item(row, 3)
                 piece_id = price_item.data(Qt.UserRole)
-                price_value = float(price_item.text().replace(',', '.'))
+
+                # Validation: ensure price is a valid number
+                price_text = price_item.text().strip()
+                if not price_text:
+                    QMessageBox.warning(self.view, self.tr("Invalid Price"),
+                        self.tr("Price cannot be empty. Please enter a valid number."))
+                    return
+                try:
+                    price_value = float(price_text.replace(',', '.'))
+                except (ValueError, TypeError):
+                    QMessageBox.warning(self.view, self.tr("Invalid Price"),
+                        self.tr(f"Invalid price '{price_text}'. Please enter a valid number."))
+                    return
 
                 # Créer ou récupérer la ligne d'offre
                 offre_ligne = session.query(OffreRecueLigne).filter_by(offre_id=offre.id_offre, piece_id=piece_id).first()
@@ -328,7 +340,7 @@ class AoDetailController(QObject):
                 supplier_columns = {offer.fournisseur.id_fournisseur: offer.fournisseur.nom for offer in offers}
             
             headers.extend(supplier_columns.values())
-            self.view.comparison_table_view.model().setHorizontalHeaderLabels(headers)
+            self.comparison_model.setHorizontalHeaderLabels(headers)
             print(f"DEBUG: build_comparison_table - Headers set: {headers}") # <-- PRINT 6
             
             price_map = {}
@@ -414,7 +426,15 @@ class AoDetailController(QObject):
                 quantity = ligne_cmd.quantite_commandee
                 print(f"DEBUG (Finalize): Quantity: {quantity}") # <-- PRINT 9
 
-                price = float(model.item(row, col).text())
+                price_str = model.item(row, col).text()
+                if price_str == "N/A" or not price_str.strip():
+                    print(f"DEBUG (Finalize): Skipping row {row}, col {col} — no valid price ({price_str})")
+                    continue
+                try:
+                    price = float(price_str)
+                except (ValueError, TypeError):
+                    print(f"DEBUG (Finalize): Skipping row {row}, col {col} — invalid price '{price_str}'")
+                    continue
                 print(f"DEBUG (Finalize): Price: {price}") # <-- PRINT 10
                 
                 if supplier.id_fournisseur not in supplier_baskets:
@@ -486,50 +506,6 @@ class AoDetailController(QObject):
         finally:
             session.close()
             print("DEBUG (Finalize): Session closed.") # <-- PRINT 18
-
-        try:
-            # ... (logique existante pour créer les commandes) ...
-            session.commit()
-            print("DEBUG (Finalize): Session committed.")
-
-            # --- NOUVELLE PARTIE : GÉNÉRATION DES PDFS ---
-            if created_orders_refs:
-                msg = f"Process complete!\nCreated new purchase orders:\n" + "\n".join(created_orders_refs)
-                msg += "\n\nDo you want to generate the PDF for these orders?"
-                
-                reply = QMessageBox.question(self.view, "Success & PDF Generation", msg,
-                                             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
-                
-                if reply == QMessageBox.Yes:
-                    # Récupérer les ID des nouvelles commandes créées
-                    newly_created_orders_ids = []
-                    for ref in created_orders_refs:
-                        # On suppose que la référence est unique et permet de retrouver l'ID
-                        # Ceci est un peu fragile, il serait mieux de stocker les ID directement
-                        new_cmd = session.query(Commande).filter_by(numero_commande=ref).first()
-                        if new_cmd:
-                            newly_created_orders_ids.append(new_cmd.id_commande)
-                    
-                    for cmd_id in newly_created_orders_ids:
-                        generate_purchase_order_pdf(cmd_id, parent_widget=self.view)
-            else:
-                 QMessageBox.information(self.view, "Process Complete", "No new orders were created (already processed or no selection).")
-            # --- FIN DE LA NOUVELLE PARTIE ---
-            
-            self.view.accept() # Ferme la fenêtre de détail
-
-        except Exception as e:
-            session.rollback()
-            print(f"ERROR in finalize_orders: {e}")
-            import traceback
-            traceback.print_exc()
-            QMessageBox.critical(self.view, "Error during finalization", str(e))
-        finally:
-            session.close()
-            print("DEBUG (Finalize): Session closed.")
-            # Rafraîchir les listes dans la fenêtre principale après la fermeture du dialogue
-            # On pourrait le faire via un signal émis par AoDetailDialog.
-            # Pour l'instant, le rafraîchissement se fait au changement d'onglet.
 
     def generate_generic_rfq_pdf(self):
         """

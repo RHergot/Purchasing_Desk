@@ -1,8 +1,18 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
-from config import config # <--- CORRECTION ICI
+from config import config
 
-engine = create_engine(config.DATABASE_URL)
+# Validate configuration before connecting
+config.validate()
+
+engine = create_engine(
+    config.DATABASE_URL,
+    pool_size=5,
+    max_overflow=10,
+    pool_recycle=3600,
+    pool_pre_ping=True,  # Verify connections before using them
+)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

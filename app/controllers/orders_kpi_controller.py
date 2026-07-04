@@ -71,7 +71,11 @@ class OrdersKpiController(QObject):
 
         session = next(get_db_session())
         try:
-            q_cmd = session.query(Commande).filter(Commande.date_commande >= start, Commande.date_commande <= end)
+            q_cmd = session.query(Commande).filter(
+                Commande.date_commande.isnot(None),
+                Commande.date_commande >= start,
+                Commande.date_commande <= end
+            )
             if supplier_id:
                 q_cmd = q_cmd.filter(Commande.fournisseur_id == supplier_id)
 
@@ -82,7 +86,9 @@ class OrdersKpiController(QObject):
             q_lignes = (
                 session.query(LigneCommande)
                 .join(Commande, LigneCommande.commande_id == Commande.id_commande)
-                .filter(Commande.date_commande >= start, Commande.date_commande <= end)
+                .filter(Commande.date_commande.isnot(None),
+                        Commande.date_commande >= start,
+                        Commande.date_commande <= end)
             )
             if supplier_id:
                 q_lignes = q_lignes.filter(Commande.fournisseur_id == supplier_id)
@@ -126,7 +132,9 @@ class OrdersKpiController(QObject):
             session.query(LigneCommande, Commande, Fournisseur)
             .join(Commande, LigneCommande.commande_id == Commande.id_commande)
             .join(Fournisseur, Commande.fournisseur_id == Fournisseur.id_fournisseur)
-            .filter(Commande.date_commande >= start, Commande.date_commande <= end)
+            .filter(Commande.date_commande.isnot(None),
+                    Commande.date_commande >= start,
+                    Commande.date_commande <= end)
         )
         if piece_id:
             q = q.filter(LigneCommande.piece_id == piece_id)
@@ -155,7 +163,9 @@ class OrdersKpiController(QObject):
             session.query(LigneCommande, Commande, Article)
             .join(Commande, LigneCommande.commande_id == Commande.id_commande)
             .join(Article, LigneCommande.piece_id == Article.id_piece)
-            .filter(Commande.date_commande >= start, Commande.date_commande <= end)
+            .filter(Commande.date_commande.isnot(None),
+                    Commande.date_commande >= start,
+                    Commande.date_commande <= end)
         )
         if supplier_id:
             q = q.filter(Commande.fournisseur_id == supplier_id)

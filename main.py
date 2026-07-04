@@ -1,6 +1,7 @@
 import sys
 from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox, QTabWidget
 from PySide6.QtGui import QAction # Nécessaire pour QAction si non importé ailleurs
+from PySide6.QtCore import Qt  # Import Qt here for attribute access before QApplication creation
 
 # Importer toutes nos vues et contrôleurs
 from app.views.pr_view import PurchaseRequisitionView
@@ -200,7 +201,8 @@ def main():
     """
     Main function to initialize and run the application.
     """
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling) # Pour une meilleure gestion des écrans HD
+    # Must be set BEFORE QApplication creation for HiDPI support
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
     app = QApplication(sys.argv)
     
     try:
@@ -217,6 +219,4 @@ def main():
     sys.exit(app.exec())
 
 if __name__ == "__main__":
-    # Nécessaire pour Qt.AA_EnableHighDpiScaling si utilisé
-    from PySide6.QtCore import Qt # S'assurer que Qt est importé avant QApplication
     main()
