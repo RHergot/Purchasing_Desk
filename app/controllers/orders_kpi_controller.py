@@ -1,4 +1,4 @@
-from PySide6.QtCore import QObject, Qt, QDate
+from PySide6.QtCore import QObject, Qt, QDate, QTimer
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtWidgets import QMessageBox
 
@@ -20,6 +20,12 @@ class OrdersKpiController(QObject):
     def __init__(self, view):
         super().__init__(view)
         self.view = view
+
+        # Debounce timer for filter changes (300ms)
+        self._debounce_timer = QTimer()
+        self._debounce_timer.setSingleShot(True)
+        self._debounce_timer.setInterval(300)
+        self._debounce_timer.timeout.connect(self.load_data)
 
         # Connexions signaux -> slots
         self.view.apply_button.clicked.connect(self.apply_filters)

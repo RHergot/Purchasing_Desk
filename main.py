@@ -1,7 +1,19 @@
 import sys
+import logging
 from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox, QTabWidget
-from PySide6.QtGui import QAction # Nécessaire pour QAction si non importé ailleurs
-from PySide6.QtCore import Qt  # Import Qt here for attribute access before QApplication creation
+from PySide6.QtGui import QAction
+from PySide6.QtCore import Qt
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    handlers=[
+        logging.FileHandler('purchasing_desk.log'),
+        logging.StreamHandler()
+    ]
+)
+log = logging.getLogger(__name__)
 
 # Importer toutes nos vues et contrôleurs
 from app.views.pr_view import PurchaseRequisitionView
@@ -201,6 +213,18 @@ def main():
     """
     Main function to initialize and run the application.
     """
+    # Global exception hook for unhandled Qt exceptions
+    def _global_exception_hook(exc_type, exc_value, exc_tb):
+        import traceback
+        tb_str = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        log.critical(f"Unhandled exception:\n{tb_str}")
+        QMessageBox.critical(
+            None, "Application Error",
+            f"An unexpected error occurred:\n{exc_value}\n\nDetails have been logged to purchasing_desk.log."
+        )
+
+    sys.excepthook = _global_exception_hook
+
     # Must be set BEFORE QApplication creation for HiDPI support
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
     app = QApplication(sys.argv)

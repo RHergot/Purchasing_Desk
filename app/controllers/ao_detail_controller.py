@@ -71,8 +71,10 @@ class AoDetailController(QObject):
             ).filter(AoFournisseurConsulte.ao_id == self.ao_id).all()
 
             for entry in consulted:
+                name_item = QStandardItem(entry.fournisseur.nom)
+                name_item.setData(entry.fournisseur.id_fournisseur, Qt.UserRole)
                 row = [
-                    QStandardItem(entry.fournisseur.nom),
+                    name_item,
                     QStandardItem("Yes" if entry.a_repondu else "No")
                 ]
                 self.suppliers_model.appendRow(row)
@@ -88,11 +90,12 @@ class AoDetailController(QObject):
                 QMessageBox.warning(self.view, self.tr("No Suppliers"), self.tr("No suppliers found in the database."))
                 return
 
+            # Extract name→ID mapping before session closes
+            supplier_map = {f.nom: f.id_fournisseur for f in all_suppliers}
+            supplier_names = list(supplier_map.keys())
+
             dialog = SelectSupplierDialog(self.view)
-            
-            self.supplier_objects = {f.nom: f for f in all_suppliers}
-            supplier_names = list(self.supplier_objects.keys())
-            
+
             list_model = QStringListModel(supplier_names)
             dialog.list_view.setModel(list_model)
 
@@ -102,21 +105,21 @@ class AoDetailController(QObject):
                     return
                 
                 selected_name = selected_indexes[0].data()
-                selected_supplier = self.supplier_objects[selected_name]
+                selected_id = supplier_map[selected_name]
                 
-                existing = session.query(AoFournisseurConsulte).filter_by(ao_id=self.ao_id, fournisseur_id=selected_supplier.id_fournisseur).first()
+                existing = session.query(AoFournisseurConsulte).filter_by(ao_id=self.ao_id, fournisseur_id=selected_id).first()
                 if existing:
                     QMessageBox.information(self.view, self.tr("Already Added"), self.tr("This supplier is already in the list for this RFQ."))
                     return
 
                 new_consulted = AoFournisseurConsulte(
                     ao_id=self.ao_id,
-                    fournisseur_id=selected_supplier.id_fournisseur
+                    fournisseur_id=selected_id
                 )
                 session.add(new_consulted)
                 session.commit()
                 
-                print(f"Added supplier '{selected_supplier.nom}' to RFQ ID {self.ao_id}")
+                print(f"Added supplier '{selected_name}' to RFQ ID {self.ao_id}")
                 
                 self.load_consulted_suppliers()
 
@@ -461,7 +464,7 @@ class AoDetailController(QObject):
                     numero_commande=new_order_ref,
                     fournisseur_id=supplier_id,
                     createur_id=ao.createur_id,
-                    date_commande=str(datetime.date.today()),
+                    date_commande=datetime.date.today(),
                     statut='Envoyee',
                     total_ht=total_ht
                 )
@@ -534,42 +537,50 @@ class AoDetailController(QObject):
     def generate_specific_supplier_rfq_pdf(self):
         """
         Generates an RFQ PDF personalized for the selected supplier.
+        Uses supplier ID stored in Qt.UserRole for direct lookup.
         """
         selected_indexes = self.view.suppliers_table_view.selectionModel().selectedRows()
         if not selected_indexes:
-            # Ce cas ne devrait pas arriver si le bouton est correctement désactivé
             QMessageBox.warning(self.view, self.tr("No Supplier Selected"), self.tr("Please select a supplier."))
             return
 
         selected_row = selected_indexes[0].row()
-        # Il faut stocker l'ID du fournisseur dans le modèle pour le récupérer facilement
-        # Pour l'instant, on récupère le nom et on refait une requête, ce n'est pas optimal
-        # On améliorera ça plus tard en stockant l'ID dans Qt.UserRole comme pour les autres tables
-        
         supplier_name_item = self.suppliers_model.item(selected_row, 0)
+        supplier_id = supplier_name_item.data(Qt.UserRole)
         supplier_name = supplier_name_item.text()
+
+        if not supplier_id:
+            # Fallback: lookup by name if UserRole not available
+            session = next(get_db_session())
+            try:
+                supplier = session.query(Fournisseur).filter_by(nom=supplier_name).one_or_none()
+                if supplier:
+                    supplier_id = supplier.id_fournisseur
+                else:
+                    QMessageBox.warning(self.view, "Error", f"Could not find supplier: {supplier_name}")
+                    return
+            finally:
+                session.close()
 
         session = next(get_db_session())
         try:
-            supplier = session.query(Fournisseur).filter_by(nom=supplier_name).one_or_none()
-            if supplier and self.ao_id:
-                print(f"Generating PDF for RFQ {self.ao_id} and Supplier {supplier.nom} (ID: {supplier.id_fournisseur})")
-                
-                # Mettre à jour la date d'envoi pour ce fournisseur (traçabilité)
+            if supplier_id and self.ao_id:
+                print(f"Generating PDF for RFQ {self.ao_id} and Supplier ID: {supplier_id}")
+
                 consulted_entry = session.query(AoFournisseurConsulte).filter_by(
                     ao_id=self.ao_id, 
-                    fournisseur_id=supplier.id_fournisseur
+                    fournisseur_id=supplier_id
                 ).first()
                 if consulted_entry:
-                    consulted_entry.date_envoi = datetime.datetime.now() # Utiliser datetime
+                    consulted_entry.date_envoi = datetime.datetime.now()
                     session.commit()
-                    print(f"Updated date_envoi for supplier {supplier.nom} on RFQ {self.ao_id}")
+                    print(f"Updated date_envoi for supplier ID {supplier_id} on RFQ {self.ao_id}")
                 
-                generate_rfq_pdf(self.ao_id, supplier.id_fournisseur, parent_widget=self.view)
+                generate_rfq_pdf(self.ao_id, supplier_id, parent_widget=self.view)
             else:
                 QMessageBox.warning(self.view, "Error", f"Could not find supplier: {supplier_name}")
         except Exception as e:
-            session.rollback() # Rollback en cas d'erreur avant le commit de date_envoi
+            session.rollback()
             QMessageBox.critical(self.view, "Error", f"An error occurred: {e}")
         finally:
             session.close()

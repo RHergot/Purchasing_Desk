@@ -2,7 +2,7 @@ from PySide6.QtCore import QObject, Qt, QDate
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QColor
 from PySide6.QtWidgets import QMessageBox
 from sqlalchemy.orm import joinedload
-import datetime # Si utilisé, sinon peut être enlevé
+from datetime import datetime
 
 from database import get_db_session
 from app.models.purchase_models import LigneCommande, Commande
@@ -271,9 +271,10 @@ class NegotiationsController(QObject):
             # Uniquement si les dates sont définies et si votre colonne date_commande est au format YYYY-MM-DD
             if self.current_start_date_str and self.current_end_date_str:
                 print(f"DEBUG LOAD: Applying date filter: {self.current_start_date_str} to {self.current_end_date_str}")
-                # La comparaison textuelle fonctionne si le format est YYYY-MM-DD
-                base_query = base_query.filter(Commande.date_commande >= self.current_start_date_str)
-                base_query = base_query.filter(Commande.date_commande <= self.current_end_date_str)
+                start_dt = datetime.strptime(self.current_start_date_str, "%Y-%m-%d")
+                end_dt = datetime.strptime(self.current_end_date_str, "%Y-%m-%d")
+                base_query = base_query.filter(Commande.date_commande >= start_dt)
+                base_query = base_query.filter(Commande.date_commande <= end_dt)
             # --- FIN AJOUT FILTRE DATE ---
         
             # Appliquer les filtres

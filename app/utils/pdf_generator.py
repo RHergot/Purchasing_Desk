@@ -54,21 +54,30 @@ except Exception as e_conf:
 # --- Fin de la Configuration Robuste ---
 
 
-def generate_purchase_order_pdf(commande_id, parent_widget=None):
-    global config # Utiliser la variable config globale
-
-    if config is None and not os.environ.get('PATH', '').strip(): # Double vérification si config est None et que le PATH est vide
-        try:
-             # Nouvelle tentative de configuration au cas où le PATH aurait été mis à jour après le démarrage de l'appli
-            print("DEBUG PDF: Nouvelle tentative de configuration de wkhtmltopdf via PATH (config était None).")
-            config = pdfkit.configuration()
-            _ = pdfkit.PDFKit('html', 'string', configuration=config)
-            print("DEBUG PDF: Nouvelle tentative de configuration via PATH semble OK.")
-        except IOError:
-            print("ERREUR CRITIQUE PDF: wkhtmltopdf toujours introuvable. PDF ne sera pas généré.")
+def _ensure_wkhtmltopdf_config(parent_widget=None):
+    """Ensures wkhtmltopdf is configured. Returns config object or None."""
+    global config
+    if config is not None:
+        return config
+    try:
+        print("DEBUG PDF: Retrying wkhtmltopdf configuration via PATH.")
+        config = pdfkit.configuration()
+        _ = pdfkit.PDFKit('html', 'string', configuration=config, options=PDFKIT_OPTIONS)
+        print("DEBUG PDF: Retry configuration via PATH succeeded.")
+        return config
+    except IOError:
+        print("ERROR CRITICAL PDF: wkhtmltopdf still not found.")
+        if parent_widget:
             QMessageBox.critical(parent_widget, "PDF Error",
-                                 "wkhtmltopdf executable not found. Please install it and ensure it's in your PATH or configure the path in the application.")
-            return False
+                "wkhtmltopdf executable not found. Please install it and ensure it's in your PATH.")
+        return None
+
+
+def generate_purchase_order_pdf(commande_id, parent_widget=None):
+    global config
+
+    if not _ensure_wkhtmltopdf_config(parent_widget):
+        return False
 
 
     print(f"DEBUG PDF: Starting PDF generation for order ID {commande_id}")
@@ -150,21 +159,10 @@ def generate_rfq_pdf(ao_id, fournisseur_id_destinataire=None, parent_widget=None
     Generates a PDF for a Request for Quotation (Appel d'Offres).
     If fournisseur_id_destinataire is provided, the PDF is personalized for that supplier.
     """
-    global config # Utiliser la config wkhtmltopdf globale
+    global config
 
-    if config is None and not os.environ.get('PATH', '').strip():
-        # ... (logique de re-test de config comme dans generate_purchase_order_pdf) ...
-        # ... (cette partie peut être factorisée dans une fonction helper plus tard)
-        try:
-            print("DEBUG RFQ_PDF: Nouvelle tentative de configuration de wkhtmltopdf via PATH (config était None).")
-            config = pdfkit.configuration()
-            _ = pdfkit.PDFKit('html', 'string', configuration=config) # Test
-            print("DEBUG RFQ_PDF: Nouvelle tentative de configuration via PATH semble OK.")
-        except IOError:
-            print("ERREUR CRITIQUE RFQ_PDF: wkhtmltopdf toujours introuvable. PDF ne sera pas généré.")
-            QMessageBox.critical(parent_widget, "PDF Error",
-                                 "wkhtmltopdf executable not found. Please install it or configure the path.")
-            return False
+    if not _ensure_wkhtmltopdf_config(parent_widget):
+        return False
 
     print(f"DEBUG RFQ_PDF: Starting PDF generation for RFQ ID {ao_id}, Supplier ID: {fournisseur_id_destinataire}")
     session = next(get_db_session())

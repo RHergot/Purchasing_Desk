@@ -1,9 +1,11 @@
-from PySide6.QtCore import QObject, Qt
+from PySide6.QtCore import QObject, Qt, QTimer
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtWidgets import QMessageBox
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 
 from database import get_db_session
-from app.models.purchase_models import AppelOffre, Commande, LigneCommande
+from app.models.purchase_models import AppelOffre, Commande, LigneCommande, OffreRecue, OffreRecueLigne
 from app.models.shared_models import Fournisseur, Article
 
 from decimal import Decimal
@@ -21,6 +23,10 @@ class FinancialKpiController(QObject):
     def __init__(self, view):
         super().__init__(view)
         self.view = view
+        self._debounce_timer = QTimer()
+        self._debounce_timer.setSingleShot(True)
+        self._debounce_timer.setInterval(300)
+        self._debounce_timer.timeout.connect(self.load_data)
 
         self.view.apply_button.clicked.connect(self.apply_filters)
 
@@ -111,67 +117,82 @@ class FinancialKpiController(QObject):
 
     def _compute_savings_option_a(self, session, start, end, supplier_id, piece_id):
         """
-        Option A: Savings = (moyenne des offres reçues - prix sélectionné) * quantité.
-        Approximation générique s'appuyant sur les entités AO/offres/commandes existantes.
+        Compute savings by comparing each Envoyee order line price against
+        the average of all offers received for the same piece across all AOs.
         """
         savings_total = Decimal("0")
         rows = []
 
-        # On suppose qu'un AO "clos" a donné lieu à une commande sur la période.
-        # On utilise Commande.date_creation comme période de référence.
-        ao_cmd_q = (
-            session.query(AppelOffre, Commande)
-            .join(Commande, AppelOffre.commande_id == Commande.id_commande)
-            .filter(Commande.date_commande >= start, Commande.date_commande <= end)
+        # Get Envoyee command lines in the date range
+        q = (
+            session.query(LigneCommande, Commande, Fournisseur)
+            .join(Commande, LigneCommande.commande_id == Commande.id_commande)
+            .join(Fournisseur, Commande.fournisseur_id == Fournisseur.id_fournisseur)
+            .filter(
+                Commande.statut == 'Envoyee',
+                Commande.date_commande >= start,
+                Commande.date_commande <= end
+            )
         )
         if supplier_id:
-            ao_cmd_q = ao_cmd_q.filter(Commande.fournisseur_id == supplier_id)
+            q = q.filter(Commande.fournisseur_id == supplier_id)
+        if piece_id:
+            q = q.filter(LigneCommande.piece_id == piece_id)
 
-        for ao, cmd in ao_cmd_q.all():
-            # Récupérer lignes de la commande et leurs pièces
-            cmd_lines = session.query(LigneCommande).filter(LigneCommande.commande_id == cmd.id_commande).all()
-            for lc in cmd_lines:
-                if piece_id and getattr(lc, 'piece_id', None) != piece_id:
-                    continue
+        for lc, cmd, fournisseur in q.all():
+            qte = getattr(lc, 'quantite_commandee', 0) or 0
+            prix_sel = Decimal(str(getattr(lc, 'prix_unitaire_ht', 0) or 0))
+            pid = getattr(lc, 'piece_id', None)
 
-                qte = getattr(lc, 'quantite_commandee', 0) or 0
-                prix_sel = Decimal(str(getattr(lc, 'prix_unitaire_ht', 0) or 0))
+            if not pid or qte == 0:
+                continue
 
-                # Récupérer les prix d'offres reçues pour cette pièce dans cet AO
-                # NB: La structure exacte des offres peut varier. Si vous avez un modèle dédié (ex: OffreFournisseur),
-                # remplacez ce bloc par la vraie requête. Ici, on met un placeholder d'accès à une table d'offres
-                # déjà utilisée dans le module Négociations.
-                avg_offre = self._average_offers_price_for_piece(session, ao.id_ao, getattr(lc, 'piece_id', None))
+            # Get average offers price for this piece (across all AOs in period)
+            avg_offre = self._average_offers_price_for_piece(session, None, pid, start, end)
 
-                if avg_offre is None:
-                    continue  # pas d'offres, pas de savings calculable
+            if avg_offre is None or avg_offre == Decimal("0"):
+                continue
 
-                saving = (avg_offre - prix_sel) * Decimal(str(qte))
-                savings_total += saving
+            saving = (avg_offre - prix_sel) * Decimal(str(qte))
+            savings_total += saving
 
-                rows.append({
-                    "ao_ref": getattr(ao, 'reference_ao', f"AO-{ao.id_ao}"),
-                    "piece_ref": None,  # rempli ci-dessous si l'article est disponible
-                    "fournisseur": getattr(cmd, 'reference_commande', ''),  # ou nom fournisseur via jointure si dispo
-                    "qte": qte,
-                    "prix_sel": prix_sel,
-                    "prix_moy_offres": avg_offre,
-                    "savings": saving,
-                })
+            rows.append({
+                "ao_ref": cmd.numero_commande or str(cmd.id_commande),
+                "piece_ref": str(pid),
+                "fournisseur": fournisseur.nom,
+                "qte": qte,
+                "prix_sel": prix_sel,
+                "prix_moy_offres": avg_offre,
+                "savings": saving,
+            })
 
         return savings_total, rows
 
-    def _average_offers_price_for_piece(self, session, ao_id, piece_id):
+    def _average_offers_price_for_piece(self, session, ao_id, piece_id, start=None, end=None):
         """
-        Placeholder: renvoie un prix moyen d'offres reçues pour une (ao_id, piece_id).
-        A remplacer par la vraie requête vers votre table d'offres (ex: OffreFournisseur).
-        On retournera None si aucune offre.
+        Returns the average offers price for a given piece across all offers.
+        If ao_id is provided, filters by specific AO.
+        If start/end are provided, filters by the offer's AO creation date.
         """
-        # Exemple d'intégration: rechercher dans une table des offres liées à AppelOffre
-        # Ici, on tente une récupération via une vue ou table que vous auriez déjà (non définie explicitement).
+        if piece_id is None:
+            return None
         try:
-            # Si vous avez un modèle OffreFournisseur: filtrer par ao_id et piece_id puis AVG
-            # Ici, renvoyer None pour éviter de supposer un schéma inexistant
+            q = (
+                session.query(func.avg(OffreRecueLigne.prix_unitaire_ht_propose))
+                .join(OffreRecue, OffreRecueLigne.offre_id == OffreRecue.id_offre)
+                .filter(OffreRecueLigne.piece_id == piece_id)
+            )
+            if ao_id is not None:
+                q = q.filter(OffreRecue.ao_id == ao_id)
+            if start is not None and end is not None:
+                q = q.join(AppelOffre, OffreRecue.ao_id == AppelOffre.id_ao)
+                q = q.filter(
+                    AppelOffre.date_creation >= start,
+                    AppelOffre.date_creation <= end
+                )
+            result = q.scalar()
+            if result is not None:
+                return Decimal(str(result))
             return None
         except Exception:
             return None
