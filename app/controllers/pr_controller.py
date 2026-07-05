@@ -12,10 +12,13 @@ from sqlalchemy.orm import joinedload
 from database import get_db_session
 from app.models.purchase_models import Commande, AppelOffre
 
+import logging
+log = logging.getLogger(__name__)
+
 class PurchaseRequisitionController(QObject):
     def __init__(self, view):
         super().__init__()
-        print("Controller __init__ started.") # DEBUG
+        log.debug("Controller __init__ started.") # DEBUG
         self.view = view
         self.model = QStandardItemModel()
         self.view.table_view.setModel(self.model)
@@ -28,10 +31,10 @@ class PurchaseRequisitionController(QObject):
         self.view.refresh_button.clicked.connect(self.load_draft_orders)
         self.view.create_po_button.clicked.connect(self.start_request_for_quotation)
         
-        print("Controller signals connected.") # DEBUG
+        log.debug("Controller signals connected.") # DEBUG
 
     def load_draft_orders(self):
-        print("Controller: load_draft_orders called.") # DEBUG
+        log.debug("Controller: load_draft_orders called.") # DEBUG
         self.model.clear()
         
         headers = ["ID", "Order Number", "Supplier", "Creator", "Order Date", "Status"]
@@ -58,7 +61,7 @@ class PurchaseRequisitionController(QObject):
                 ]
                 self.model.appendRow(row)
             
-            print(f"Controller: Loaded {len(draft_orders)} draft orders.")
+            log.debug(f"Controller: Loaded {len(draft_orders)} draft orders.")
         finally:
             session.close()
 
@@ -68,7 +71,7 @@ class PurchaseRequisitionController(QObject):
         """
         Initiates an RFQ process for the selected draft order.
         """
-        print("Controller: start_request_for_quotation called!") # DEBUG
+        log.debug("Controller: start_request_for_quotation called!") # DEBUG
 
         # 1. Récupérer la ligne sélectionnée
         selected_indexes = self.view.table_view.selectionModel().selectedRows()

@@ -9,6 +9,9 @@ from app.models.purchase_models import AppelOffre, Commande, LigneCommande
 from app.models.shared_models import PieceFournisseurInfo, Fournisseur, Article
 from sqlalchemy.orm import joinedload
 
+import logging
+log = logging.getLogger(__name__)
+
 # Configuration de Jinja2
 template_loader = jinja2.FileSystemLoader(searchpath=os.path.join(os.path.dirname(__file__), '..', 'templates'))
 template_env = jinja2.Environment(loader=template_loader)
@@ -32,24 +35,24 @@ PDFKIT_OPTIONS = {
 
 try:
     if os.path.exists(WKHTMLTOPDF_PATH_EXPLICIT):
-        print(f"DEBUG PDF: Tentative d'utilisation de wkhtmltopdf à (chemin explicite): {WKHTMLTOPDF_PATH_EXPLICIT}")
+        log.debug(f"DEBUG PDF: Tentative d'utilisation de wkhtmltopdf à (chemin explicite): {WKHTMLTOPDF_PATH_EXPLICIT}")
         config = pdfkit.configuration(wkhtmltopdf=WKHTMLTOPDF_PATH_EXPLICIT)
         # Petit test pour voir si pdfkit l'accepte
         _ = pdfkit.PDFKit('html', 'string', configuration=config, options=PDFKIT_OPTIONS)
-        print(f"DEBUG PDF: Configuration avec chemin explicite ({WKHTMLTOPDF_PATH_EXPLICIT}) semble OK.")
+        log.debug(f"DEBUG PDF: Configuration avec chemin explicite ({WKHTMLTOPDF_PATH_EXPLICIT}) semble OK.")
     else:
-        print(f"DEBUG PDF: wkhtmltopdf non trouvé à (chemin explicite): {WKHTMLTOPDF_PATH_EXPLICIT}. Tentative via le PATH système.")
+        log.debug(f"DEBUG PDF: wkhtmltopdf non trouvé à (chemin explicite): {WKHTMLTOPDF_PATH_EXPLICIT}. Tentative via le PATH système.")
         # On ne passe pas de chemin, pdfkit cherchera dans le PATH
         config = pdfkit.configuration()
         _ = pdfkit.PDFKit('html', 'string', configuration=config, options=PDFKIT_OPTIONS)
-        print("DEBUG PDF: Configuration via PATH système semble OK.")
+        log.debug("DEBUG PDF: Configuration via PATH système semble OK.")
 except IOError as e_io:
-    print(f"ERREUR CRITIQUE PDF: Impossible de configurer wkhtmltopdf. {e_io}")
-    print("Veuillez vérifier que wkhtmltopdf est installé et que le chemin est correct ou qu'il est dans le PATH.")
+    log.debug(f"ERREUR CRITIQUE PDF: Impossible de configurer wkhtmltopdf. {e_io}")
+    log.debug("Veuillez vérifier que wkhtmltopdf est installé et que le chemin est correct ou qu'il est dans le PATH.")
     # On met config à None pour que la fonction de génération échoue proprement
     config = None 
 except Exception as e_conf:
-    print(f"ERREUR INATTENDUE lors de la configuration de wkhtmltopdf: {e_conf}")
+    log.debug(f"ERREUR INATTENDUE lors de la configuration de wkhtmltopdf: {e_conf}")
     config = None
 # --- Fin de la Configuration Robuste ---
 
@@ -60,13 +63,13 @@ def _ensure_wkhtmltopdf_config(parent_widget=None):
     if config is not None:
         return config
     try:
-        print("DEBUG PDF: Retrying wkhtmltopdf configuration via PATH.")
+        log.debug("DEBUG PDF: Retrying wkhtmltopdf configuration via PATH.")
         config = pdfkit.configuration()
         _ = pdfkit.PDFKit('html', 'string', configuration=config, options=PDFKIT_OPTIONS)
-        print("DEBUG PDF: Retry configuration via PATH succeeded.")
+        log.debug("DEBUG PDF: Retry configuration via PATH succeeded.")
         return config
     except IOError:
-        print("ERROR CRITICAL PDF: wkhtmltopdf still not found.")
+        log.debug("ERROR CRITICAL PDF: wkhtmltopdf still not found.")
         if parent_widget:
             QMessageBox.critical(parent_widget, "PDF Error",
                 "wkhtmltopdf executable not found. Please install it and ensure it's in your PATH.")
@@ -80,7 +83,7 @@ def generate_purchase_order_pdf(commande_id, parent_widget=None):
         return False
 
 
-    print(f"DEBUG PDF: Starting PDF generation for order ID {commande_id}")
+    log.debug(f"DEBUG PDF: Starting PDF generation for order ID {commande_id}")
     session = next(get_db_session())
     try:
         order = session.query(Commande).options(
@@ -90,7 +93,7 @@ def generate_purchase_order_pdf(commande_id, parent_widget=None):
         ).filter(Commande.id_commande == commande_id).one_or_none()
 
         if not order:
-            print(f"DEBUG PDF: Order ID {commande_id} not found.")
+            log.debug(f"DEBUG PDF: Order ID {commande_id} not found.")
             QMessageBox.warning(parent_widget, "Data Error", f"Order ID {commande_id} not found.")
             return False
 
@@ -98,17 +101,22 @@ def generate_purchase_order_pdf(commande_id, parent_widget=None):
             'commande': order,
             'fournisseur': order.fournisseur,
             'lignes': order.lignes,
-            'devise': order.fournisseur.devise if order.fournisseur and order.fournisseur.devise else 'EUR'
+            'devise': order.fournisseur.devise if order.fournisseur and order.fournisseur.devise else 'EUR',
+            'company_name': os.getenv('COMPANY_NAME', 'Your Company'),
+            'company_address': os.getenv('COMPANY_ADDRESS', ''),
+            'company_city': os.getenv('COMPANY_CITY', ''),
+            'company_phone': os.getenv('COMPANY_PHONE', ''),
+            'company_email': os.getenv('COMPANY_EMAIL', ''),
         }
         
         template = template_env.get_template('order_template.html')
         html_output = template.render(context)
-        print("DEBUG PDF: HTML rendered successfully.")
+        log.debug("DEBUG PDF: HTML rendered successfully.")
 
         default_filename = f"BC_{order.numero_commande or order.id_commande}.pdf"
         documents_path = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
         default_save_path = os.path.join(documents_path, default_filename)
-        print(f"DEBUG PDF: Default save path: {default_save_path}")
+        log.debug(f"DEBUG PDF: Default save path: {default_save_path}")
 
         file_path, _ = QFileDialog.getSaveFileName(
             parent_widget, 
@@ -118,37 +126,37 @@ def generate_purchase_order_pdf(commande_id, parent_widget=None):
         )
 
         if file_path:
-            print(f"DEBUG PDF: User selected path: {file_path}")
+            log.debug(f"DEBUG PDF: User selected path: {file_path}")
             try:
                 # On utilise TOUJOURS la variable 'config' qui a été initialisée en haut
                 success = pdfkit.from_string(html_output, file_path, configuration=config, options=PDFKIT_OPTIONS)
                 
                 if success:
-                    print(f"DEBUG PDF: PDF generation reported SUCCESS. File: {file_path}")
+                    log.debug(f"DEBUG PDF: PDF generation reported SUCCESS. File: {file_path}")
                     QMessageBox.information(parent_widget, "PDF Saved", f"Purchase order saved to:\n{file_path}")
                     return True
                 else:
-                    print("DEBUG PDF: PDF generation reported FAILURE (no exception).")
+                    log.debug("DEBUG PDF: PDF generation reported FAILURE (no exception).")
                     QMessageBox.critical(parent_widget, "PDF Error", "PDFKit reported failure but did not raise an exception. Check wkhtmltopdf installation and PATH.")
                     return False
             except IOError as e_io_pdf: # Spécifiquement pour les erreurs de wkhtmltopdf
-                print(f"ERROR during pdfkit.from_string (IOError): {e_io_pdf}")
+                log.debug(f"ERROR during pdfkit.from_string (IOError): {e_io_pdf}")
                 QMessageBox.critical(parent_widget, "PDF Generation Error", f"Could not generate PDF (wkhtmltopdf issue): {e_io_pdf}")
                 return False
             except Exception as pdf_e:
-                print(f"ERROR during pdfkit.from_string (General): {pdf_e}")
+                log.debug(f"ERROR during pdfkit.from_string (General): {pdf_e}")
                 import traceback
-                traceback.print_exc()
+                log.exception("Exception traceback:")
                 QMessageBox.critical(parent_widget, "PDF Generation Error", f"Could not generate PDF: {pdf_e}")
                 return False
         else:
-            print("DEBUG PDF: PDF generation cancelled by user.")
+            log.debug("DEBUG PDF: PDF generation cancelled by user.")
             return False
 
     except Exception as e:
-        print(f"Error in generate_purchase_order_pdf function: {e}")
+        log.debug(f"Error in generate_purchase_order_pdf function: {e}")
         import traceback
-        traceback.print_exc()
+        log.exception("Exception traceback:")
         QMessageBox.critical(parent_widget, "Application Error", f"An unexpected error occurred: {e}")
         return False
     finally:
@@ -164,7 +172,7 @@ def generate_rfq_pdf(ao_id, fournisseur_id_destinataire=None, parent_widget=None
     if not _ensure_wkhtmltopdf_config(parent_widget):
         return False
 
-    print(f"DEBUG RFQ_PDF: Starting PDF generation for RFQ ID {ao_id}, Supplier ID: {fournisseur_id_destinataire}")
+    log.debug(f"DEBUG RFQ_PDF: Starting PDF generation for RFQ ID {ao_id}, Supplier ID: {fournisseur_id_destinataire}")
     session = next(get_db_session())
     try:
         # 1. Charger l'Appel d'Offres et sa commande liée (pour les pièces)
@@ -174,7 +182,7 @@ def generate_rfq_pdf(ao_id, fournisseur_id_destinataire=None, parent_widget=None
         ).filter(AppelOffre.id_ao == ao_id).one_or_none()
 
         if not ao:
-            print(f"Error: RFQ with ID {ao_id} not found.")
+            log.debug(f"Error: RFQ with ID {ao_id} not found.")
             QMessageBox.warning(parent_widget, "Data Error", f"RFQ ID {ao_id} not found.")
             return False
 
@@ -233,20 +241,19 @@ def generate_rfq_pdf(ao_id, fournisseur_id_destinataire=None, parent_widget=None
         if file_path:
             success = pdfkit.from_string(html_output, file_path, configuration=config, options=PDFKIT_OPTIONS)
             if success:
-                print(f"RFQ PDF saved to: {file_path}")
+                log.debug(f"RFQ PDF saved to: {file_path}")
                 QMessageBox.information(parent_widget, "PDF Saved", f"RFQ PDF saved to:\n{file_path}")
                 return True
             else:
                 # ... (gestion d'erreur pdfkit failure)
                 return False
         else:
-            print("RFQ PDF generation cancelled by user.")
+            log.debug("RFQ PDF generation cancelled by user.")
             return False
 
     except Exception as e:
-        print(f"Error generating RFQ PDF for AO ID {ao_id}: {e}")
-        import traceback
-        traceback.print_exc()
+        log.debug(f"Error generating RFQ PDF for AO ID {ao_id}: {e}")
+        log.exception("Exception traceback:")
         QMessageBox.critical(parent_widget, "PDF Generation Error", f"Could not generate RFQ PDF: {e}")
         return False
     finally:

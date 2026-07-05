@@ -1,23 +1,24 @@
-from PySide6.QtCore import QObject, Qt, QTimer
+import logging
+from PySide6.QtCore import QObject, QTimer
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtWidgets import QMessageBox
 from sqlalchemy import func
-from sqlalchemy.orm import joinedload
+from decimal import Decimal
+from collections import defaultdict
 
 from database import get_db_session
 from app.models.purchase_models import AppelOffre, Commande, LigneCommande, OffreRecue, OffreRecueLigne
 from app.models.shared_models import Fournisseur, Article
+from app.utils.kpi_helpers import line_total, PopulateFiltersMixin
 
-from decimal import Decimal
-from collections import defaultdict
+log = logging.getLogger(__name__)
 
 
-class FinancialKpiController(QObject):
-    """
-    Contrôleur KPI financier.
-    - Calcule Spend total, Savings (option A: moyenne des offres vs prix sélectionné), Taux de savings
-    - Table Savings par AO
-    - Table tendance prix moyen (placeholder: prix moyen par pièce sur la période)
+class FinancialKpiController(QObject, PopulateFiltersMixin):
+    """Financial KPI controller.
+
+    Calculates: total spend, savings (offers average vs selected price),
+    savings rate, savings by RFQ table, and average price trend.
     """
 
     def __init__(self, view):
@@ -34,29 +35,6 @@ class FinancialKpiController(QObject):
         self.load_data()
 
     # ------------------------- UI wiring -------------------------
-    def populate_filters(self):
-        session = next(get_db_session())
-        try:
-            # Fournisseurs
-            self.view.supplier_combo.blockSignals(True)
-            self.view.supplier_combo.clear()
-            self.view.supplier_combo.addItem(self.view.tr("All suppliers"), None)
-            for f in session.query(Fournisseur).order_by(Fournisseur.nom.asc()).all():
-                self.view.supplier_combo.addItem(f.nom, f.id_fournisseur)
-            self.view.supplier_combo.blockSignals(False)
-
-            # Pièces
-            self.view.piece_combo.blockSignals(True)
-            self.view.piece_combo.clear()
-            self.view.piece_combo.addItem(self.view.tr("All items"), None)
-            for a in session.query(Article).order_by(Article.reference.asc()).all():
-                self.view.piece_combo.addItem(f"{a.reference} - {a.designation}", a.id_piece)
-            self.view.piece_combo.blockSignals(False)
-        except Exception as e:
-            print(f"ERROR populate_filters (financial): {e}")
-        finally:
-            session.close()
-
     def apply_filters(self):
         self.load_data()
 
@@ -72,28 +50,28 @@ class FinancialKpiController(QObject):
         start, end, supplier_id, piece_id = self._current_filters()
         session = next(get_db_session())
         try:
-            # Spend total = somme des montants des commandes sur la période (filtre fournisseur/pièce si sélectionnés)
+            # Total spend: sum of order amounts in period
             spend_total = self._compute_spend_total(session, start, end, supplier_id, piece_id)
 
-            # Savings = somme((moyenne_offres - prix_selectionne) * qte) pour AO clos et transformés sur la période
+            # Savings: (average_offers - selected_price) * qty for closed, converted RFQs
             savings_total, savings_rows = self._compute_savings_option_a(session, start, end, supplier_id, piece_id)
 
-            savings_rate = (Decimal("0") if spend_total == 0 else (savings_total / spend_total))
+            savings_rate = Decimal("0") if spend_total == 0 else (savings_total / spend_total)
 
             # KPIs
             self.view.spend_total_label.setText(self.view.tr(f"Total spend: {spend_total}"))
             self.view.savings_total_label.setText(self.view.tr(f"Savings: {savings_total}"))
             self.view.savings_rate_label.setText(self.view.tr(f"Savings rate: {round(savings_rate * 100, 2)}%"))
 
-            # Table Savings par AO
+            # Savings by RFQ table
             self._populate_savings_table(savings_rows)
 
-            # Tendance prix moyen par pièce (placeholder simple)
+            # Average price trend by item
             self._populate_price_trend(session, start, end, supplier_id, piece_id)
 
-        except Exception as e:
-            print(f"ERROR load_data (financial): {e}")
-            QMessageBox.warning(self.view, self.view.tr("Error"), str(e))
+        except Exception:
+            log.exception("Error loading financial KPI data:")
+            QMessageBox.warning(self.view, self.view.tr("Error"), self.view.tr("Could not load financial data."))
         finally:
             session.close()
 
@@ -110,16 +88,12 @@ class FinancialKpiController(QObject):
             q = q.filter(LigneCommande.piece_id == piece_id)
 
         for lc, cmd in q.all():
-            qte = getattr(lc, 'quantite_commandee', 0) or 0
-            pu = getattr(lc, 'prix_unitaire_ht', 0) or 0
-            total += Decimal(str(pu)) * Decimal(str(qte))
+            total += line_total(lc)
         return total
 
     def _compute_savings_option_a(self, session, start, end, supplier_id, piece_id):
-        """
-        Compute savings by comparing each Envoyee order line price against
-        the average of all offers received for the same piece across all AOs.
-        """
+        """Compute savings by comparing each Envoyee order line price against
+        the average of all offers received for the same piece."""
         savings_total = Decimal("0")
         rows = []
 
@@ -129,7 +103,7 @@ class FinancialKpiController(QObject):
             .join(Commande, LigneCommande.commande_id == Commande.id_commande)
             .join(Fournisseur, Commande.fournisseur_id == Fournisseur.id_fournisseur)
             .filter(
-                Commande.statut == 'Envoyee',
+                Commande.statut == "Envoyee",
                 Commande.date_commande >= start,
                 Commande.date_commande <= end
             )
@@ -140,14 +114,14 @@ class FinancialKpiController(QObject):
             q = q.filter(LigneCommande.piece_id == piece_id)
 
         for lc, cmd, fournisseur in q.all():
-            qte = getattr(lc, 'quantite_commandee', 0) or 0
-            prix_sel = Decimal(str(getattr(lc, 'prix_unitaire_ht', 0) or 0))
-            pid = getattr(lc, 'piece_id', None)
+            qte = getattr(lc, "quantite_commandee", 0) or 0
+            prix_sel = Decimal(str(getattr(lc, "prix_unitaire_ht", 0) or 0))
+            pid = getattr(lc, "piece_id", None)
 
             if not pid or qte == 0:
                 continue
 
-            # Get average offers price for this piece (across all AOs in period)
+            # Average offers price for this piece (across all RFQs in period)
             avg_offre = self._average_offers_price_for_piece(session, None, pid, start, end)
 
             if avg_offre is None or avg_offre == Decimal("0"):
@@ -169,10 +143,10 @@ class FinancialKpiController(QObject):
         return savings_total, rows
 
     def _average_offers_price_for_piece(self, session, ao_id, piece_id, start=None, end=None):
-        """
-        Returns the average offers price for a given piece across all offers.
-        If ao_id is provided, filters by specific AO.
-        If start/end are provided, filters by the offer's AO creation date.
+        """Returns the average offers price for a given piece across all offers.
+
+        If ao_id is provided, filters by specific RFQ.
+        If start/end are provided, filters by RFQ creation date.
         """
         if piece_id is None:
             return None
@@ -201,7 +175,8 @@ class FinancialKpiController(QObject):
         model = QStandardItemModel()
         model.setHorizontalHeaderLabels([
             self.view.tr("RFQ"), self.view.tr("Item"), self.view.tr("Supplier"),
-            self.view.tr("Qty"), self.view.tr("Selected price"), self.view.tr("Average offers price"), self.view.tr("Savings")
+            self.view.tr("Qty"), self.view.tr("Selected price"),
+            self.view.tr("Average offers price"), self.view.tr("Savings")
         ])
 
         for r in rows:
@@ -219,11 +194,13 @@ class FinancialKpiController(QObject):
         self.view.savings_table.resizeColumnsToContents()
 
     def _populate_price_trend(self, session, start, end, supplier_id, piece_id):
-        """Placeholder: Prix moyen par pièce sur la période (table simple)."""
+        """Average price per item over period (simple table)."""
         model = QStandardItemModel()
-        model.setHorizontalHeaderLabels([self.view.tr("Reference"), self.view.tr("Designation"), self.view.tr("Average price")])
+        model.setHorizontalHeaderLabels([
+            self.view.tr("Reference"), self.view.tr("Designation"),
+            self.view.tr("Average price")
+        ])
 
-        # Calcul simple: moyenne des prix unitaires commandés par pièce
         sums = defaultdict(Decimal)
         counts = defaultdict(int)
 
@@ -239,7 +216,7 @@ class FinancialKpiController(QObject):
             q = q.filter(LigneCommande.piece_id == piece_id)
 
         for lc, art, cmd in q.all():
-            pu = Decimal(str(getattr(lc, 'prix_unitaire_ht', 0) or 0))
+            pu = Decimal(str(getattr(lc, "prix_unitaire_ht", 0) or 0))
             key = (art.reference, art.designation)
             sums[key] += pu
             counts[key] += 1

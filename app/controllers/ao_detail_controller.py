@@ -9,6 +9,9 @@ from PySide6.QtGui import QColor
 from sqlalchemy.orm import joinedload
 import datetime
 
+import logging
+log = logging.getLogger(__name__)
+
 from database import get_db_session
 from app.models.purchase_models import OffreRecue, OffreRecueLigne, Commande, LigneCommande, AppelOffre, AoFournisseurConsulte
 from app.models.shared_models import Fournisseur, Article
@@ -32,7 +35,7 @@ class AoDetailController(QObject):
         self.view.enter_offer_button.clicked.connect(self.enter_supplier_offer)
         self.view.generate_rfq_pdf_button.clicked.connect(self.generate_generic_rfq_pdf)
                 
-        print("DEBUG (Detail): Detail controller signals connected.")
+        log.debug("DEBUG (Detail): Detail controller signals connected.")
 
         self.view.generate_supplier_rfq_pdf_button.clicked.connect(self.generate_specific_supplier_rfq_pdf)
         self.view.suppliers_table_view.selectionModel().selectionChanged.connect(self.on_supplier_selection_changed)        
@@ -59,7 +62,7 @@ class AoDetailController(QObject):
             session.close()
 
     def load_consulted_suppliers(self):
-        print("Loading consulted suppliers...")
+        log.debug("Loading consulted suppliers...")
         self.suppliers_model.clear()
         headers = ["Supplier Name", "Has Replied?"]
         self.suppliers_model.setHorizontalHeaderLabels([self.view.tr(h) for h in headers])
@@ -119,7 +122,7 @@ class AoDetailController(QObject):
                 session.add(new_consulted)
                 session.commit()
                 
-                print(f"Added supplier '{selected_name}' to RFQ ID {self.ao_id}")
+                log.debug(f"Added supplier '{selected_name}' to RFQ ID {self.ao_id}")
                 
                 self.load_consulted_suppliers()
 
@@ -276,7 +279,7 @@ class AoDetailController(QObject):
 
         # Mettre à jour la sélection pour cette ligne
         self.selected_offers[row] = col
-        print(f"DEBUG: Row {row} selection changed to column {col}")
+        log.debug(f"DEBUG: Row {row} selection changed to column {col}")
 
         # Rafraîchir l'affichage pour montrer la nouvelle sélection
         self.refresh_comparison_table_highlighting()
@@ -312,12 +315,12 @@ class AoDetailController(QObject):
                     item.setBackground(QColor("white"))
 
     def build_comparison_table(self):
-        print("DEBUG: build_comparison_table STARTING") # <-- PRINT 1
+        log.debug("DEBUG: build_comparison_table STARTING") # <-- PRINT 1
         self.comparison_model.clear()
         
         session = next(get_db_session())
         try:
-            print("DEBUG: build_comparison_table - Session obtained") # <-- PRINT 2
+            log.debug("DEBUG: build_comparison_table - Session obtained") # <-- PRINT 2
             ao = session.query(AppelOffre).filter_by(id_ao=self.ao_id).one()
             commande = session.query(Commande).options(
                 joinedload(Commande.lignes).joinedload(LigneCommande.piece)
@@ -325,17 +328,17 @@ class AoDetailController(QObject):
             
             items_to_quote = commande.lignes
             if not items_to_quote:
-                print("DEBUG: build_comparison_table - No items to quote. Returning.") # <-- PRINT 3
+                log.debug("DEBUG: build_comparison_table - No items to quote. Returning.") # <-- PRINT 3
                 return
 
-            print(f"DEBUG: build_comparison_table - Found {len(items_to_quote)} items to quote.") # <-- PRINT 4
+            log.debug(f"DEBUG: build_comparison_table - Found {len(items_to_quote)} items to quote.") # <-- PRINT 4
 
             offers = session.query(OffreRecue).options(
                 joinedload(OffreRecue.fournisseur),
                 joinedload(OffreRecue.lignes_offre)
             ).filter_by(ao_id=self.ao_id).all()
             
-            print(f"DEBUG: build_comparison_table - Found {len(offers)} offers received.") # <-- PRINT 5
+            log.debug(f"DEBUG: build_comparison_table - Found {len(offers)} offers received.") # <-- PRINT 5
 
             headers = ["Item Ref.", "Designation"]
             supplier_columns = {}
@@ -344,7 +347,7 @@ class AoDetailController(QObject):
             
             headers.extend(supplier_columns.values())
             self.comparison_model.setHorizontalHeaderLabels(headers)
-            print(f"DEBUG: build_comparison_table - Headers set: {headers}") # <-- PRINT 6
+            log.debug(f"DEBUG: build_comparison_table - Headers set: {headers}") # <-- PRINT 6
             
             price_map = {}
             for offer in offers:
@@ -353,7 +356,7 @@ class AoDetailController(QObject):
                         price_map[line.piece_id] = {}
                     price_map[line.piece_id][offer.fournisseur_id] = line.prix_unitaire_ht_propose
             
-            print(f"DEBUG: build_comparison_table - Price map built: {price_map}") # <-- PRINT 7
+            log.debug(f"DEBUG: build_comparison_table - Price map built: {price_map}") # <-- PRINT 7
 
             for item in items_to_quote:
                 piece = item.piece
@@ -373,28 +376,28 @@ class AoDetailController(QObject):
                 
                 self.comparison_model.appendRow(row_data)
             
-            print("DEBUG: build_comparison_table - Rows appended to model.") # <-- PRINT 8
+            log.debug("DEBUG: build_comparison_table - Rows appended to model.") # <-- PRINT 8
             self.view.comparison_table_view.resizeColumnsToContents()
             self.refresh_comparison_table_highlighting() # S'assurer que ça s'exécute
-            print("DEBUG: build_comparison_table - Highlighting refreshed.") # <-- PRINT 9
+            log.debug("DEBUG: build_comparison_table - Highlighting refreshed.") # <-- PRINT 9
 
         except Exception as e:
-            print(f"ERROR in build_comparison_table: {e}") # <-- PRINT D'ERREUR
+            log.debug(f"ERROR in build_comparison_table: {e}") # <-- PRINT D'ERREUR
             import traceback
-            traceback.print_exc() # Imprime le traceback complet
+            log.exception("Exception traceback:") # Imprime le traceback complet
         finally:
             session.close()
-            print("DEBUG: build_comparison_table - Session closed.") # <-- PRINT 10
+            log.debug("DEBUG: build_comparison_table - Session closed.") # <-- PRINT 10
 
     def finalize_orders(self):
-        print("DEBUG (Finalize): finalize_orders STARTING") # <-- PRINT 1
+        log.debug("DEBUG (Finalize): finalize_orders STARTING") # <-- PRINT 1
 
         if not self.selected_offers:
-            print("DEBUG (Finalize): No offers selected. Aborting.") # <-- PRINT 2
+            log.debug("DEBUG (Finalize): No offers selected. Aborting.") # <-- PRINT 2
             QMessageBox.warning(self.view, "No Selection", "Please select at least one offer by double-clicking on a price.")
             return
 
-        print(f"DEBUG (Finalize): Selected offers: {self.selected_offers}") # <-- PRINT 3
+        log.debug(f"DEBUG (Finalize): Selected offers: {self.selected_offers}") # <-- PRINT 3
 
         supplier_baskets = {}
         model = self.view.comparison_table_view.model()
@@ -404,59 +407,59 @@ class AoDetailController(QObject):
             header_text = model.horizontalHeaderItem(col).text()
             supplier_ids_by_col[col] = header_text
         
-        print(f"DEBUG (Finalize): Supplier IDs by column: {supplier_ids_by_col}") # <-- PRINT 4
+        log.debug(f"DEBUG (Finalize): Supplier IDs by column: {supplier_ids_by_col}") # <-- PRINT 4
 
         session = next(get_db_session())
         try:
-            print("DEBUG (Finalize): Session obtained.") # <-- PRINT 5
+            log.debug("DEBUG (Finalize): Session obtained.") # <-- PRINT 5
             ao = session.query(AppelOffre).filter_by(id_ao=self.ao_id).one() # S'assurer que ao est défini
-            print(f"DEBUG (Finalize): Current AO ID: {ao.id_ao}, Original CMD ID: {ao.commande_id}") # <-- PRINT 5.1
+            log.debug(f"DEBUG (Finalize): Current AO ID: {ao.id_ao}, Original CMD ID: {ao.commande_id}") # <-- PRINT 5.1
 
             for row, col in self.selected_offers.items():
                 supplier_name = supplier_ids_by_col[col]
-                print(f"DEBUG (Finalize): Processing row {row}, col {col}, supplier_name: {supplier_name}") # <-- PRINT 6
+                log.debug(f"DEBUG (Finalize): Processing row {row}, col {col}, supplier_name: {supplier_name}") # <-- PRINT 6
                 
                 supplier = session.query(Fournisseur).filter_by(nom=supplier_name).one()
-                print(f"DEBUG (Finalize): Found supplier ID: {supplier.id_fournisseur}") # <-- PRINT 7
+                log.debug(f"DEBUG (Finalize): Found supplier ID: {supplier.id_fournisseur}") # <-- PRINT 7
                 
                 piece_ref = model.item(row, 0).text()
                 piece = session.query(Article).filter_by(reference=piece_ref).one()
-                print(f"DEBUG (Finalize): Found piece ID: {piece.id_piece}, Ref: {piece_ref}") # <-- PRINT 8
+                log.debug(f"DEBUG (Finalize): Found piece ID: {piece.id_piece}, Ref: {piece_ref}") # <-- PRINT 8
                 
                 # Récupérer la quantité depuis la commande originale
                 # Utiliser ao.commande_id qui est déjà chargé
                 ligne_cmd = session.query(LigneCommande).filter_by(commande_id=ao.commande_id, piece_id=piece.id_piece).one()
                 quantity = ligne_cmd.quantite_commandee
-                print(f"DEBUG (Finalize): Quantity: {quantity}") # <-- PRINT 9
+                log.debug(f"DEBUG (Finalize): Quantity: {quantity}") # <-- PRINT 9
 
                 price_str = model.item(row, col).text()
                 if price_str == "N/A" or not price_str.strip():
-                    print(f"DEBUG (Finalize): Skipping row {row}, col {col} — no valid price ({price_str})")
+                    log.debug(f"DEBUG (Finalize): Skipping row {row}, col {col} — no valid price ({price_str})")
                     continue
                 try:
                     price = float(price_str)
                 except (ValueError, TypeError):
-                    print(f"DEBUG (Finalize): Skipping row {row}, col {col} — invalid price '{price_str}'")
+                    log.debug(f"DEBUG (Finalize): Skipping row {row}, col {col} — invalid price '{price_str}'")
                     continue
-                print(f"DEBUG (Finalize): Price: {price}") # <-- PRINT 10
+                log.debug(f"DEBUG (Finalize): Price: {price}") # <-- PRINT 10
                 
                 if supplier.id_fournisseur not in supplier_baskets:
                     supplier_baskets[supplier.id_fournisseur] = []
                 
                 supplier_baskets[supplier.id_fournisseur].append( (piece.id_piece, quantity, price) )
             
-            print(f"DEBUG (Finalize): Supplier baskets built: {supplier_baskets}") # <-- PRINT 11
+            log.debug(f"DEBUG (Finalize): Supplier baskets built: {supplier_baskets}") # <-- PRINT 11
 
             created_orders_refs = []
             if not supplier_baskets:
-                print("DEBUG (Finalize): No supplier baskets created. Nothing to commit.") # <-- PRINT 11.1
+                log.debug("DEBUG (Finalize): No supplier baskets created. Nothing to commit.") # <-- PRINT 11.1
                 QMessageBox.information(self.view, "No Action", "No valid offers were selected to create orders.")
                 return
 
 
             for supplier_id, items in supplier_baskets.items():
                 total_ht = sum(qty * price for _, qty, price in items)
-                print(f"DEBUG (Finalize): Creating order for supplier ID {supplier_id}, total HT: {total_ht}") # <-- PRINT 12
+                log.debug(f"DEBUG (Finalize): Creating order for supplier ID {supplier_id}, total HT: {total_ht}") # <-- PRINT 12
                 
                 new_order_ref = f"BC-{datetime.date.today().year}-{self.ao_id}-{supplier_id}"
                 
@@ -470,7 +473,7 @@ class AoDetailController(QObject):
                 )
                 session.add(new_commande)
                 session.flush() 
-                print(f"DEBUG (Finalize): New order {new_order_ref} (ID: {new_commande.id_commande}) added.") # <-- PRINT 13
+                log.debug(f"DEBUG (Finalize): New order {new_order_ref} (ID: {new_commande.id_commande}) added.") # <-- PRINT 13
 
                 for piece_id, qty, price in items:
                     new_ligne = LigneCommande(
@@ -480,20 +483,20 @@ class AoDetailController(QObject):
                         prix_unitaire_ht=price
                     )
                     session.add(new_ligne)
-                print(f"DEBUG (Finalize): Lines added for order {new_order_ref}.") # <-- PRINT 14
+                log.debug(f"DEBUG (Finalize): Lines added for order {new_order_ref}.") # <-- PRINT 14
                 
                 created_orders_refs.append(new_order_ref)
 
             original_commande = session.query(Commande).filter_by(id_commande=ao.commande_id).one()
             original_commande.statut = 'Annulee'
-            print(f"DEBUG (Finalize): Original command {original_commande.id_commande} status set to Annulee.") # <-- PRINT 15
+            log.debug(f"DEBUG (Finalize): Original command {original_commande.id_commande} status set to Annulee.") # <-- PRINT 15
             
             ao_to_close = session.query(AppelOffre).filter_by(id_ao=self.ao_id).one()
             ao_to_close.statut = 'Clos'
-            print(f"DEBUG (Finalize): AO {ao_to_close.id_ao} status set to Clos.") # <-- PRINT 16
+            log.debug(f"DEBUG (Finalize): AO {ao_to_close.id_ao} status set to Clos.") # <-- PRINT 16
             
             session.commit()
-            print("DEBUG (Finalize): Session committed.") # <-- PRINT 17
+            log.debug("DEBUG (Finalize): Session committed.") # <-- PRINT 17
 
             QMessageBox.information(self.view, "Success", f"Process complete!\nCreated new purchase orders:\n" + "\n".join(created_orders_refs))
             
@@ -501,14 +504,13 @@ class AoDetailController(QObject):
 
         except Exception as e:
             session.rollback()
-            print(f"ERROR in finalize_orders: {e}") # <-- PRINT D'ERREUR
-            import traceback
-            traceback.print_exc()
+            log.debug(f"ERROR in finalize_orders: {e}")
+            log.exception("Exception traceback:")
             QMessageBox.critical(self.view, "Error during finalization", str(e))
         
         finally:
             session.close()
-            print("DEBUG (Finalize): Session closed.") # <-- PRINT 18
+            log.debug("DEBUG (Finalize): Session closed.") # <-- PRINT 18
 
     def generate_generic_rfq_pdf(self):
         """
@@ -565,7 +567,7 @@ class AoDetailController(QObject):
         session = next(get_db_session())
         try:
             if supplier_id and self.ao_id:
-                print(f"Generating PDF for RFQ {self.ao_id} and Supplier ID: {supplier_id}")
+                log.debug(f"Generating PDF for RFQ {self.ao_id} and Supplier ID: {supplier_id}")
 
                 consulted_entry = session.query(AoFournisseurConsulte).filter_by(
                     ao_id=self.ao_id, 
@@ -574,7 +576,7 @@ class AoDetailController(QObject):
                 if consulted_entry:
                     consulted_entry.date_envoi = datetime.datetime.now()
                     session.commit()
-                    print(f"Updated date_envoi for supplier ID {supplier_id} on RFQ {self.ao_id}")
+                    log.debug(f"Updated date_envoi for supplier ID {supplier_id} on RFQ {self.ao_id}")
                 
                 generate_rfq_pdf(self.ao_id, supplier_id, parent_widget=self.view)
             else:

@@ -9,6 +9,9 @@ from database import get_db_session
 from app.models.shared_models import Article, Fournisseur, PieceExtension, Machine
 from app.views.piece_filter_dialog import PieceFilterDialog # Importer la dialogue
 
+import logging
+log = logging.getLogger(__name__)
+
 class PieceListController(QObject):
     def __init__(self, view):
         super().__init__()
@@ -32,7 +35,7 @@ class PieceListController(QObject):
             filter_type, filter_value = dialog.get_selected_filter()
             self.active_filter_type = filter_type
             self.active_filter_value = filter_value
-            print(f"Filters applied: Type={self.active_filter_type}, Value={self.active_filter_value}")
+            log.debug(f"Filters applied: Type={self.active_filter_type}, Value={self.active_filter_value}")
             self.load_filtered_pieces()
             # Mettre à jour le label des filtres actifs dans PieceListView
             if hasattr(self.view, 'active_filters_label'):
@@ -63,7 +66,7 @@ class PieceListController(QObject):
 
 
     def load_filtered_pieces(self):
-        print(f"Loading filtered pieces. Filter type: {self.active_filter_type}, Value: {self.active_filter_value}")
+        log.debug(f"Loading filtered pieces. Filter type: {self.active_filter_type}, Value: {self.active_filter_value}")
         self.model.clear()
         
         headers = ["Ref.", "Name", "Category", "Machine", "Pref. Supplier", "Unit Price", "Stock", "Alert Lvl", "Status"]
@@ -119,12 +122,11 @@ class PieceListController(QObject):
                 ]
                 self.model.appendRow(row)
             
-            print(f"Loaded {len(filtered_pieces)} pieces matching criteria.")
+            log.debug(f"Loaded {len(filtered_pieces)} pieces matching criteria.")
 
         except Exception as e:
-            print(f"Error loading filtered pieces: {e}")
-            import traceback
-            traceback.print_exc()
+            log.debug(f"Error loading filtered pieces: {e}")
+            log.exception("Exception traceback:")
         finally:
             session.close()
         self.view.table_view.resizeColumnsToContents()

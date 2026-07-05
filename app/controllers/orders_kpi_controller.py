@@ -1,21 +1,20 @@
-from PySide6.QtCore import QObject, Qt, QDate, QTimer
+import logging
+from PySide6.QtCore import QObject, QTimer
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtWidgets import QMessageBox
+from decimal import Decimal
 
 from database import get_db_session
 from app.models.purchase_models import Commande, LigneCommande
 from app.models.shared_models import Fournisseur, Article
+from app.utils.kpi_helpers import line_total, PopulateFiltersMixin
 
-from decimal import Decimal
+log = logging.getLogger(__name__)
 
 
-class OrdersKpiController(QObject):
-    """
-    Contrôleur pour la vue OrdersKpiView.
-    - Récupère les données selon filtres
-    - Calcule KPIs (nb commandes, total HT, panier moyen)
-    - Alimente les tableaux Top fournisseurs / Top pièces
-    """
+class OrdersKpiController(QObject, PopulateFiltersMixin):
+    """KPI controller for order statistics — count, total, average basket,
+    top suppliers and top items."""
 
     def __init__(self, view):
         super().__init__(view)
@@ -27,39 +26,14 @@ class OrdersKpiController(QObject):
         self._debounce_timer.setInterval(300)
         self._debounce_timer.timeout.connect(self.load_data)
 
-        # Connexions signaux -> slots
+        # Signal connections
         self.view.apply_button.clicked.connect(self.apply_filters)
 
-        # Chargement initial
+        # Initial load
         self.populate_filters()
         self.load_data()
 
     # ------------------------- UI wiring -------------------------
-    def populate_filters(self):
-        """Remplit les combos Fournisseur et Pièce."""
-        session = next(get_db_session())
-        try:
-            # Fournisseurs
-            self.view.supplier_combo.blockSignals(True)
-            # Conserve l'item 0 "Tous les fournisseurs"
-            self.view.supplier_combo.clear()
-            self.view.supplier_combo.addItem(self.view.tr("All suppliers"), None)
-            for f in session.query(Fournisseur).order_by(Fournisseur.nom.asc()).all():
-                self.view.supplier_combo.addItem(f.nom, f.id_fournisseur)
-            self.view.supplier_combo.blockSignals(False)
-
-            # Pièces
-            self.view.piece_combo.blockSignals(True)
-            self.view.piece_combo.clear()
-            self.view.piece_combo.addItem(self.view.tr("All items"), None)
-            for a in session.query(Article).order_by(Article.reference.asc()).all():
-                self.view.piece_combo.addItem(f"{a.reference} - {a.designation}", a.id_piece)
-            self.view.piece_combo.blockSignals(False)
-        except Exception as e:
-            print(f"ERROR populate_filters: {e}")
-        finally:
-            session.close()
-
     def apply_filters(self):
         self.load_data()
 
@@ -72,7 +46,7 @@ class OrdersKpiController(QObject):
         return start, end, supplier_id, piece_id
 
     def load_data(self):
-        """Charge les données et met à jour KPIs et tableaux."""
+        """Load data and update KPIs and tables."""
         start, end, supplier_id, piece_id = self._current_filters()
 
         session = next(get_db_session())
@@ -88,7 +62,7 @@ class OrdersKpiController(QObject):
             commandes = q_cmd.all()
             nb_commandes = len(commandes)
 
-            # Détail lignes pour Total HT et Top
+            # Line detail for total and top tables
             q_lignes = (
                 session.query(LigneCommande)
                 .join(Commande, LigneCommande.commande_id == Commande.id_commande)
@@ -103,13 +77,7 @@ class OrdersKpiController(QObject):
 
             lignes = q_lignes.all()
 
-            total_ht = Decimal("0")
-            for lc in lignes:
-                # On suppose présence de champs quantite_commandee et prix_unitaire
-                qte = getattr(lc, 'quantite_commandee', 0) or 0
-                pu = getattr(lc, 'prix_unitaire_ht', 0) or 0
-                total_ht += Decimal(str(pu)) * Decimal(str(qte))
-
+            total_ht = sum(line_total(lc) for lc in lignes)
             panier_moyen = (total_ht / nb_commandes) if nb_commandes > 0 else Decimal("0")
 
             # KPIs
@@ -117,14 +85,14 @@ class OrdersKpiController(QObject):
             self.view.orders_total_ht_label.setText(self.view.tr(f"Total (excl. tax): {total_ht}"))
             self.view.orders_avg_basket_label.setText(self.view.tr(f"Average basket: {panier_moyen}"))
 
-            # Top fournisseurs
+            # Top suppliers
             self._populate_top_suppliers(session, start, end, piece_id)
-            # Top pièces
+            # Top items
             self._populate_top_pieces(session, start, end, supplier_id)
 
-        except Exception as e:
-            print(f"ERROR load_data: {e}")
-            QMessageBox.warning(self.view, self.view.tr("Error"), str(e))
+        except Exception:
+            log.exception("Error loading orders KPI data:")
+            QMessageBox.warning(self.view, self.view.tr("Error"), self.view.tr("Could not load orders data."))
         finally:
             session.close()
 
@@ -132,7 +100,6 @@ class OrdersKpiController(QObject):
         model = QStandardItemModel()
         model.setHorizontalHeaderLabels([self.view.tr("Supplier"), self.view.tr("Total (excl. tax)")])
 
-        # Agrégation manuelle avec Python pour rester robuste (champs variables)
         totals_by_supplier = {}
         q = (
             session.query(LigneCommande, Commande, Fournisseur)
@@ -146,9 +113,7 @@ class OrdersKpiController(QObject):
             q = q.filter(LigneCommande.piece_id == piece_id)
 
         for lc, cmd, f in q.all():
-            qte = getattr(lc, 'quantite_commandee', 0) or 0
-            pu = getattr(lc, 'prix_unitaire_ht', 0) or 0
-            amt = Decimal(str(pu)) * Decimal(str(qte))
+            amt = line_total(lc)
             totals_by_supplier[f.nom] = totals_by_supplier.get(f.nom, Decimal("0")) + amt
 
         for name, total in sorted(totals_by_supplier.items(), key=lambda x: x[1], reverse=True)[:20]:
@@ -162,7 +127,10 @@ class OrdersKpiController(QObject):
 
     def _populate_top_pieces(self, session, start, end, supplier_id):
         model = QStandardItemModel()
-        model.setHorizontalHeaderLabels([self.view.tr("Reference"), self.view.tr("Designation"), self.view.tr("Qty"), self.view.tr("Total (excl. tax)")])
+        model.setHorizontalHeaderLabels([
+            self.view.tr("Reference"), self.view.tr("Designation"),
+            self.view.tr("Qty"), self.view.tr("Total (excl. tax)")
+        ])
 
         totals_by_piece = {}
         q = (
@@ -177,9 +145,8 @@ class OrdersKpiController(QObject):
             q = q.filter(Commande.fournisseur_id == supplier_id)
 
         for lc, cmd, art in q.all():
-            qte = getattr(lc, 'quantite_commandee', 0) or 0
-            pu = getattr(lc, 'prix_unitaire_ht', 0) or 0
-            amt = Decimal(str(pu)) * Decimal(str(qte))
+            qte = getattr(lc, "quantite_commandee", 0) or 0
+            amt = line_total(lc)
             key = (art.reference, art.designation)
             if key not in totals_by_piece:
                 totals_by_piece[key] = {"qte": 0, "total": Decimal("0")}

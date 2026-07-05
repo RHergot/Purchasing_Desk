@@ -12,6 +12,9 @@ from app.models.purchase_models import AppelOffre
 from app.views.ao_detail_dialog import AoDetailDialog
 from app.controllers.ao_detail_controller import AoDetailController
 
+import logging
+log = logging.getLogger(__name__)
+
 class AoListController(QObject):
     def __init__(self, view):
         super().__init__()
@@ -24,7 +27,7 @@ class AoListController(QObject):
         self.view.table_view.doubleClicked.connect(self.open_ao_details)
 
     def load_open_aos(self):
-        print("Loading open RFQs...")
+        log.debug("Loading open RFQs...")
         self.model.clear()
         
         headers = ["RFQ ID", "RFQ Reference", "Title", "Linked Order ID", "Creator", "Creation Date", "Status"]
@@ -48,7 +51,7 @@ class AoListController(QObject):
                 ]
                 self.model.appendRow(row)
             
-            print(f"Loaded {len(open_aos)} open RFQs.")
+            log.debug(f"Loaded {len(open_aos)} open RFQs.")
         finally:
             session.close()
 
@@ -65,10 +68,10 @@ class AoListController(QObject):
         ao_id = id_item.data(Qt.UserRole)
         
         if ao_id is None:
-            print("Error: Could not retrieve AO ID from selected row.")
+            log.debug("Error: Could not retrieve AO ID from selected row.")
             return
 
-        print(f"Attempting to open dialog for AO ID: {ao_id}")
+        log.debug(f"Attempting to open dialog for AO ID: {ao_id}")
         
         # Instanciation de la boîte de dialogue
         dialog = AoDetailDialog(parent=self.view)

@@ -1,10 +1,10 @@
-PySide6
-SQLAlchemy
-psycopg2-binary
-pytest
-python-dotenv
-python-dateutil>=2.8.2   # Manipulation avancée des dates
-bcrypt>=4.0.0            # Hachage sécurisé des mots de passe
-jinja2>=3.1.2            # Moteur de templates (PDF, mails, etc.)
-pdfkit>=1.0.0            # Génération de PDF à partir de HTML
-# pywin32>=306             # Interface avec Windows (pour pdfkit)
+PySide6>=6.5.0
+SQLAlchemy>=2.0.0
+psycopg2-binary>=2.9.0
+pytest>=7.0.0
+python-dotenv>=1.0.0
+python-dateutil>=2.8.2
+bcrypt>=4.0.0
+jinja2>=3.1.2
+pdfkit>=1.0.0
+# pywin32>=306  # Windows only — required for pdfkit on Windows

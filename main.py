@@ -115,18 +115,18 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, self.tr("Error"), f"Could not open Piece Catalogue window:\n{e}")
             import traceback
-            traceback.print_exc()
+            log.exception("Exception traceback:")
 
     def refresh_current_tab(self, index):
         """
         Refreshes the data of the currently visible tab.
         """
         if index == 0: # Onglet Draft Orders
-            print("Refreshing Draft Orders tab...")
+            log.debug("Refreshing Draft Orders tab...")
             if hasattr(self, 'pr_controller'): # Vérifier si le contrôleur existe
                 self.pr_controller.load_draft_orders()
         elif index == 1: # Onglet Open RFQs
-            print("Refreshing Open RFQs tab...")
+            log.debug("Refreshing Open RFQs tab...")
             if hasattr(self, 'ao_list_controller'): # Vérifier si le contrôleur existe
                 self.ao_list_controller.load_open_aos()
 
@@ -157,7 +157,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, self.tr("Error"), f"Could not open Negotiations KPI window:\n{e}")
             import traceback
-            traceback.print_exc()
+            log.exception("Exception traceback:")
         
     def show_orders_kpi(self):
         """
@@ -182,7 +182,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, self.tr("Error"), f"Could not open Orders KPI window:\n{e}")
             import traceback
-            traceback.print_exc()
+            log.exception("Exception traceback:")
         
     def show_financial_kpi(self):
         """
@@ -207,7 +207,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, self.tr("Error"), f"Could not open Financial KPI window:\n{e}")
             import traceback
-            traceback.print_exc()
+            log.exception("Exception traceback:")
 
 def main():
     """
@@ -232,7 +232,7 @@ def main():
     try:
         connection = engine.connect()
         connection.close()
-        print("Database connection successful.")
+        log.debug("Database connection successful.")
     except Exception as e:
         QMessageBox.critical(None, "Database Error", f"Could not connect to database: {e}")
         return # Quitter si la connexion échoue

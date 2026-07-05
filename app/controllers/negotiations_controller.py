@@ -8,6 +8,9 @@ from database import get_db_session
 from app.models.purchase_models import LigneCommande, Commande
 from app.models.shared_models import Article, Fournisseur, PieceExtension, Machine
 
+import logging
+log = logging.getLogger(__name__)
+
 class NegotiationsController(QObject):
     def __init__(self, view):
         super().__init__(view)
@@ -24,48 +27,48 @@ class NegotiationsController(QObject):
         self.current_start_date_str = None
         self.current_end_date_str = None
         
-        print(f"DEBUG INIT: Initial sort mode: {self.current_sort_mode}")
+        log.debug(f"DEBUG INIT: Initial sort mode: {self.current_sort_mode}")
         
         # Connexion du bouton de tri
         if hasattr(self.view, 'toggle_sort_button') and self.view.toggle_sort_button is not None:
             self.view.toggle_sort_button.clicked.connect(self.toggle_sort_and_reload)
-            print("DEBUG INIT: toggle_sort_button.clicked connected.")
+            log.debug("DEBUG INIT: toggle_sort_button.clicked connected.")
         else:
-            print("ERROR INIT: toggle_sort_button not found in view.")
+            log.debug("ERROR INIT: toggle_sort_button not found in view.")
 
         # Connexion du ComboBox de filtre fournisseur
         if hasattr(self.view, 'supplier_filter_combo') and self.view.supplier_filter_combo is not None:
             self.view.supplier_filter_combo.currentIndexChanged.connect(self.on_supplier_filter_changed)
-            print("DEBUG INIT: supplier_filter_combo.currentIndexChanged connected.")
+            log.debug("DEBUG INIT: supplier_filter_combo.currentIndexChanged connected.")
         else:
-            print("ERROR INIT: supplier_filter_combo not found in view.")
+            log.debug("ERROR INIT: supplier_filter_combo not found in view.")
             
         # Connexion du ComboBox de filtre pièce
         if hasattr(self.view, 'piece_filter_combo') and self.view.piece_filter_combo is not None:
             self.view.piece_filter_combo.currentIndexChanged.connect(self.on_piece_filter_changed)
-            print("DEBUG INIT: piece_filter_combo.currentIndexChanged connected.")
+            log.debug("DEBUG INIT: piece_filter_combo.currentIndexChanged connected.")
         else:
-            print("ERROR INIT: piece_filter_combo not found in view.")
+            log.debug("ERROR INIT: piece_filter_combo not found in view.")
         
          # Connecter le ComboBox de filtre machine
         if hasattr(self.view, 'machine_filter_combo') and self.view.machine_filter_combo is not None:
             self.view.machine_filter_combo.currentIndexChanged.connect(self.on_machine_filter_changed)
-            print("DEBUG INIT: machine_filter_combo.currentIndexChanged connected.")
+            log.debug("DEBUG INIT: machine_filter_combo.currentIndexChanged connected.")
         else:
-            print("ERROR INIT: machine_filter_combo not found or is None in view.")
+            log.debug("ERROR INIT: machine_filter_combo not found or is None in view.")
 
          # Connecter les QDateEdit
         if hasattr(self.view, 'start_date_edit') and self.view.start_date_edit is not None:
             self.view.start_date_edit.dateChanged.connect(self.on_date_filter_changed)
-            print("DEBUG INIT: start_date_edit.dateChanged connected.")
+            log.debug("DEBUG INIT: start_date_edit.dateChanged connected.")
         else:
-            print("ERROR INIT: start_date_edit not found in view.")
+            log.debug("ERROR INIT: start_date_edit not found in view.")
             
         if hasattr(self.view, 'end_date_edit') and self.view.end_date_edit is not None:
             self.view.end_date_edit.dateChanged.connect(self.on_date_filter_changed)
-            print("DEBUG INIT: end_date_edit.dateChanged connected.")
+            log.debug("DEBUG INIT: end_date_edit.dateChanged connected.")
         else:
-            print("ERROR INIT: end_date_edit not found in view.")
+            log.debug("ERROR INIT: end_date_edit not found in view.")
             
         self.populate_all_filters() # Peupler tous les filtres une fois au démarrage
         self.load_negotiation_data()    # Chargement initial des données
@@ -91,21 +94,21 @@ class NegotiationsController(QObject):
         self.current_start_date_str = start_qdate.toString("yyyy-MM-dd")
         self.current_end_date_str = end_qdate.toString("yyyy-MM-dd")
         
-        print(f"DEBUG FILTER CHANGED: Date range set to: {self.current_start_date_str} - {self.current_end_date_str}")
+        log.debug(f"DEBUG FILTER CHANGED: Date range set to: {self.current_start_date_str} - {self.current_end_date_str}")
         self.load_negotiation_data()
     
     def populate_all_filters(self):
         """Populates all filter ComboBoxes."""
-        print("DEBUG POPULATE_ALL_FILTERS: Starting to populate all filters.")
+        log.debug("DEBUG POPULATE_ALL_FILTERS: Starting to populate all filters.")
         self.populate_supplier_filter_combo()
         self.populate_piece_filter_combo()
         self.populate_machine_filter_combo() # Appel de la nouvelle méthode
         # self.populate_machine_filter_combo() # À ajouter plus tard
-        print("DEBUG POPULATE_ALL_FILTERS: Finished populating all filters.")
+        log.debug("DEBUG POPULATE_ALL_FILTERS: Finished populating all filters.")
 
     def populate_supplier_filter_combo(self):
         if not hasattr(self.view, 'supplier_filter_combo'): return
-        print("DEBUG POPULATE_SUPPLIER: Populating...")
+        log.debug("DEBUG POPULATE_SUPPLIER: Populating...")
         
         # Sauver la sélection actuelle pour essayer de la restaurer
         previous_selected_id = self.view.supplier_filter_combo.currentData()
@@ -128,16 +131,16 @@ class NegotiationsController(QObject):
                 idx = self.view.supplier_filter_combo.findData(previous_selected_id)
                 if idx != -1: self.view.supplier_filter_combo.setCurrentIndex(idx)
 
-        except Exception as e: print(f"Error populating supplier filter: {e}")
+        except Exception as e: log.debug(f"Error populating supplier filter: {e}")
         finally: 
             session.close()
             self.view.supplier_filter_combo.blockSignals(False)
-        print("DEBUG POPULATE_SUPPLIER: Done.")
+        log.debug("DEBUG POPULATE_SUPPLIER: Done.")
         pass
 
     def populate_piece_filter_combo(self):
         if not hasattr(self.view, 'piece_filter_combo'): return
-        print("DEBUG POPULATE_PIECE: Populating...")
+        log.debug("DEBUG POPULATE_PIECE: Populating...")
 
         previous_selected_ref = self.view.piece_filter_combo.currentData()
 
@@ -158,20 +161,20 @@ class NegotiationsController(QObject):
                 idx = self.view.piece_filter_combo.findData(previous_selected_ref)
                 if idx != -1: self.view.piece_filter_combo.setCurrentIndex(idx)
 
-        except Exception as e: print(f"Error populating piece filter: {e}")
+        except Exception as e: log.debug(f"Error populating piece filter: {e}")
         finally: 
             session.close()
             self.view.piece_filter_combo.blockSignals(False)
-        print("DEBUG POPULATE_PIECE: Done.")
+        log.debug("DEBUG POPULATE_PIECE: Done.")
         pass
 
     def populate_machine_filter_combo(self):
        
         if not hasattr(self.view, 'machine_filter_combo'):
-            print("DEBUG POPULATE_MACHINE: View has no machine_filter_combo.")
+            log.debug("DEBUG POPULATE_MACHINE: View has no machine_filter_combo.")
             return
 
-        print("DEBUG POPULATE_MACHINE: Populating machine filter...")
+        log.debug("DEBUG POPULATE_MACHINE: Populating machine filter...")
         current_selection_data = self.view.machine_filter_combo.currentData()
         
         self.view.machine_filter_combo.blockSignals(True)
@@ -193,44 +196,44 @@ class NegotiationsController(QObject):
             for id_m, nom_m in machines:
                 self.view.machine_filter_combo.addItem(nom_m, id_m)
             
-            print(f"DEBUG POPULATE_MACHINE: Populated with {len(machines)} machines.")
+            log.debug(f"DEBUG POPULATE_MACHINE: Populated with {len(machines)} machines.")
 
             if current_selection_data is not None:
                 index = self.view.machine_filter_combo.findData(current_selection_data)
                 if index >= 0: self.view.machine_filter_combo.setCurrentIndex(index)
             
         except Exception as e:
-            print(f"Error populating machine filter: {e}")
-            import traceback; traceback.print_exc() # Garder pour voir d'autres erreurs potentielles
+            log.debug(f"Error populating machine filter: {e}")
+            import traceback; log.exception("Exception traceback:") # Garder pour voir d'autres erreurs potentielles
         finally:
             session.close()
             self.view.machine_filter_combo.blockSignals(False)
-        print("DEBUG POPULATE_MACHINE: Done.")
+        log.debug("DEBUG POPULATE_MACHINE: Done.")
         pass
 
     def on_supplier_filter_changed(self, index):
         if not hasattr(self.view, 'supplier_filter_combo'): return
         self.current_supplier_filter_id = self.view.supplier_filter_combo.itemData(index)
-        print(f"DEBUG FILTER CHANGED: Supplier ID set to: {self.current_supplier_filter_id}")
+        log.debug(f"DEBUG FILTER CHANGED: Supplier ID set to: {self.current_supplier_filter_id}")
         self.load_negotiation_data()
         pass
 
     def on_piece_filter_changed(self, index):
         if not hasattr(self.view, 'piece_filter_combo'): return
         self.current_piece_filter_ref = self.view.piece_filter_combo.itemData(index)
-        print(f"DEBUG FILTER CHANGED: Piece Ref set to: {self.current_piece_filter_ref}")
+        log.debug(f"DEBUG FILTER CHANGED: Piece Ref set to: {self.current_piece_filter_ref}")
         self.load_negotiation_data()
         pass
 
     def on_machine_filter_changed(self, index):
         if not hasattr(self.view, 'machine_filter_combo'): return
         self.current_machine_filter_id = self.view.machine_filter_combo.itemData(index)
-        print(f"DEBUG FILTER CHANGED: Machine ID set to: {self.current_machine_filter_id}")
+        log.debug(f"DEBUG FILTER CHANGED: Machine ID set to: {self.current_machine_filter_id}")
         self.load_negotiation_data()
         pass
 
     def toggle_sort_and_reload(self):
-        print(f"--- METHOD: toggle_sort_and_reload CALLED ---")
+        log.debug(f"--- METHOD: toggle_sort_and_reload CALLED ---")
         # ... (logique de toggle_sort_and_reload comme avant, inchangée)
         if self.current_sort_mode == "commande":
             self.current_sort_mode = "piece"
@@ -242,7 +245,7 @@ class NegotiationsController(QObject):
 
 
     def load_negotiation_data(self):
-        print(f"Loading negotiation data (Sort: {self.current_sort_mode}, Supplier: {self.current_supplier_filter_id}, Piece: {self.current_piece_filter_ref})...")
+        log.debug(f"Loading negotiation data (Sort: {self.current_sort_mode}, Supplier: {self.current_supplier_filter_id}, Piece: {self.current_piece_filter_ref})...")
         self.model.clear()
         
         headers = [
@@ -270,7 +273,7 @@ class NegotiationsController(QObject):
             # --- AJOUT DU FILTRE DATE ---
             # Uniquement si les dates sont définies et si votre colonne date_commande est au format YYYY-MM-DD
             if self.current_start_date_str and self.current_end_date_str:
-                print(f"DEBUG LOAD: Applying date filter: {self.current_start_date_str} to {self.current_end_date_str}")
+                log.debug(f"DEBUG LOAD: Applying date filter: {self.current_start_date_str} to {self.current_end_date_str}")
                 start_dt = datetime.strptime(self.current_start_date_str, "%Y-%m-%d")
                 end_dt = datetime.strptime(self.current_end_date_str, "%Y-%m-%d")
                 base_query = base_query.filter(Commande.date_commande >= start_dt)
@@ -279,15 +282,15 @@ class NegotiationsController(QObject):
         
             # Appliquer les filtres
             if self.current_supplier_filter_id is not None:
-                print(f"DEBUG LOAD: Applying supplier filter ID: {self.current_supplier_filter_id}")
+                log.debug(f"DEBUG LOAD: Applying supplier filter ID: {self.current_supplier_filter_id}")
                 base_query = base_query.filter(Commande.fournisseur_id == self.current_supplier_filter_id)
             
             if self.current_piece_filter_ref is not None:
-                print(f"DEBUG LOAD: Applying piece filter Ref: {self.current_piece_filter_ref}")
+                log.debug(f"DEBUG LOAD: Applying piece filter Ref: {self.current_piece_filter_ref}")
                 base_query = base_query.join(LigneCommande.piece).filter(Article.reference == self.current_piece_filter_ref)
 
             if self.current_machine_filter_id is not None:
-                print(f"DEBUG LOAD: Applying machine filter ID: {self.current_machine_filter_id}")
+                log.debug(f"DEBUG LOAD: Applying machine filter ID: {self.current_machine_filter_id}")
                 
                 # Pour filtrer sur PieceExtension.machine_id, nous devons nous assurer
                 # que LigneCommande est jointe à Piece (Article), et Piece à PieceExtension.
@@ -306,7 +309,7 @@ class NegotiationsController(QObject):
 
             # Appliquer le tri
             if self.current_sort_mode == "piece":
-                print("DEBUG LOAD: Applying sort by Item Reference (piece) for GROUPING LOGIC")
+                log.debug("DEBUG LOAD: Applying sort by Item Reference (piece) for GROUPING LOGIC")
                 # S'assurer que la jointure avec Article (Piece) est faite si pas déjà par le filtre
                 if self.current_machine_filter_id is None and self.current_piece_filter_ref is None:
                     # Si aucun filtre n'a encore joint avec Piece, on le fait pour le tri
@@ -369,7 +372,7 @@ class NegotiationsController(QObject):
                     self.view.table_view.setSpan(piece_group_start_model_row, 5, rows_in_current_model_group, 1)
 
             else: # Tri par 'commande'
-                print("DEBUG LOAD: Applying sort by Purchase Order (commande)")
+                log.debug("DEBUG LOAD: Applying sort by Purchase Order (commande)")
                 ordered_lines = base_query.order_by(Commande.date_commande.desc(), LigneCommande.id_ligne).all()
                 # ... (Copiez ici la logique de peuplement du mode "commande" comme avant)
                 for ligne in ordered_lines:
@@ -396,13 +399,12 @@ class NegotiationsController(QObject):
                     elif unit_saving < 0: row[9].setForeground(QColor("red")); row[10].setForeground(QColor("red"))
                     self.model.appendRow(row)
 
-            print(f"Model populated with {self.model.rowCount()} rows for display.")
+            log.debug(f"Model populated with {self.model.rowCount()} rows for display.")
             self.view.total_savings_value_label.setText(f"{total_savings_all_lines:.2f} EUR")
 
         except Exception as e:
-            print(f"Error loading negotiation data: {e}")
-            import traceback
-            traceback.print_exc()
+            log.debug(f"Error loading negotiation data: {e}")
+            log.exception("Exception traceback:")
             self.view.total_savings_value_label.setText(self.view.tr("Error"))
         finally:
             session.close()
@@ -410,10 +412,10 @@ class NegotiationsController(QObject):
         self.view.table_view.resizeColumnsToContents()
         if self.current_sort_mode == "piece":
             self.view.table_view.setSortingEnabled(False)
-            print("DEBUG LOAD: Table sorting disabled for 'piece' mode.")
+            log.debug("DEBUG LOAD: Table sorting disabled for 'piece' mode.")
         else:
             self.view.table_view.setSortingEnabled(True)
             self.view.table_view.sortByColumn(-1, Qt.AscendingOrder)
-            print("DEBUG LOAD: Table sorting enabled for 'commande' mode and reset.")
+            log.debug("DEBUG LOAD: Table sorting enabled for 'commande' mode and reset.")
         
-        print("DEBUG LOAD: Table operations complete.")
+        log.debug("DEBUG LOAD: Table operations complete.")
